@@ -14,6 +14,7 @@ from typing import Sequence, Callable, Any
 from fastapi import FastAPI, APIRouter
 from starlette.middleware import Middleware
 
+from .common.exception_handlers import register_exception_handlers
 from .lifespan import HookRegistry, fastapi_lifespan
 from .middlewares import RequestIdMiddleware
 from .openapi import configure_openapi_schema, OpenAPICustomConfig
@@ -49,6 +50,8 @@ def create_app(
         openapi_remove_422: bool = True,
         openapi_remove_validation_error: bool = True,
         openapi_enable_bearer_auth: bool = False,
+        # 异常处理器
+        register_exceptions: bool = True,
         # 数据库集成（可选）
         engine_manager: Any | None = None,
         session_factory: Any | None = None,
@@ -61,7 +64,8 @@ def create_app(
         1. 生命周期管理 — 自动接入 :func:`fastapi_lifespan`，合并用户注册表与 core_registry
         2. 中间件 — 按列表顺序添加（先添加的在内层）
         3. 路由 — 支持直接传入 APIRouter 或 (router, kwargs) 元组
-        4. 数据库 — 可选地将 EngineManager / SessionFactory 挂载到 app.state
+        4. 异常处理器 — 自动注册统一异常处理，返回标准 APIResponse 格式
+        5. 数据库 — 可选地将 EngineManager / SessionFactory 挂载到 app.state
 
     装配完成后，``app.state`` 上可访问以下属性：
         - ``app.state.registries``  — 生命周期注册表列表
@@ -111,6 +115,7 @@ def create_app(
         openapi_remove_422: 是否移除 422 验证错误响应
         openapi_remove_validation_error: 是否移除验证错误参数
         openapi_enable_bearer_auth: 是否启用 Bearer 认证
+        register_exceptions: 是否自动注册统一异常处理器，默认 True
         engine_manager: 数据库引擎管理器实例（可选）
         session_factory: 会话工厂实例（可选）
         **kwargs: 传递给 FastAPI() 构造函数的额外参数（不允许传 lifespan）
@@ -192,9 +197,14 @@ def create_app(
         )
     )
 
-    # ---- 8. 数据库组件挂载到 app.state ----
+    # ---- 8. 异常处理器 ----
+    if register_exceptions:
+        register_exception_handlers(app)
+
+    # ---- 9. 数据库组件挂载到 app.state ----
     if engine_manager is not None:
         app.state.engine_manager = engine_manager
+
     if session_factory is not None:
         app.state.session_factory = session_factory
 
