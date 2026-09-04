@@ -1,0 +1,28 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      # 升级 checkout 到 v5 适配 Node24
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # 升级 setup-python 到 v6
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install --upgrade pip build
+      - run: python -m build
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
