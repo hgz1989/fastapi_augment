@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
-from sqlalchemy import ColumnExpressionArgument, delete, exists, func, select, update
+from sqlalchemy import ColumnElement, delete, exists, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -38,37 +39,47 @@ class CrudBase(Generic[ModelT]):
         await user_crud.list(session, name=None)           # None -> IS NULL
     """
 
-    def __init__(self, model: type[ModelT]) -> None:
+    def __init__(self, model: type[ModelT]):
+        """Initialize the CRUD repository.
+
+        Args:
+            model: The SQLAlchemy model class to operate on.
+        """
         self.model = model
-
-    # ── Create ───────────────────────────────────────────────────────────
-
-    async def create(self, session: AsyncSession, obj: ModelT) -> ModelT:
-        """Persist a new object. Flushes so PKs / defaults are populated; never commits."""
-        session.add(obj)
-        await session.flush()
-        return obj
-
-    async def create_many(self, session: AsyncSession, objs: Sequence[ModelT]) -> list[ModelT]:
-        """Persist multiple objects in one batch. Flushes; never commits."""
-        session.add_all(objs)
-        await session.flush()
-        return list(objs)
 
     # ── Read ─────────────────────────────────────────────────────────────
 
-    async def get(self, session: AsyncSession, id: str) -> ModelT | None:
-        """Fetch a single row by primary key (checks the session identity map first)."""
-        return await session.get(self.model, id)
+    async def get(self, session: AsyncSession, id_: str) -> ModelT | None:
+        """Fetch a single row by primary key.
+
+        Checks the session identity map first.
+
+        Args:
+            session: The async session to use.
+            id_: The primary key value.
+
+        Returns:
+            The model instance, or ``None`` if not found.
+        """
+        return await session.get(self.model, id_)
 
     async def get_one(
         self,
         session: AsyncSession,
         *,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None = None,
+        expressions: Sequence[ColumnElement] | None = None,
         **filters: Any,
     ) -> ModelT | None:
-        """Fetch the first row matching the filters, or ``None``."""
+        """Fetch the first row matching the filters.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            The first matching instance, or ``None`` if no row matches.
+        """
         stmt = select(self.model).where(*self._conditions(expressions, filters)).limit(1)
         result = await session.execute(stmt)
         return result.scalars().first()
@@ -77,12 +88,12 @@ class CrudBase(Generic[ModelT]):
         self,
         session: AsyncSession,
         *,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None = None,
-        order_by: Sequence[str | ColumnExpressionArgument[Any]] | None = None,
+        expressions: Sequence[ColumnElement] | None = None,
+        order_by: Sequence[str | ColumnElement] | None = None,
         offset: int = 0,
         limit: int | None = 100,
         **filters: Any,
-    ) -> list[ModelT]:
+    ) -> Sequence[ModelT]:
         """Fetch rows matching the filters with optional ordering / pagination.
 
         Args:
@@ -93,14 +104,21 @@ class CrudBase(Generic[ModelT]):
             offset: Number of rows to skip.
             limit: Max rows to return (``None`` = no limit).
             **filters: Equality keyword filters.
+
+        Returns:
+            A list of matching model instances.
         """
         stmt = select(self.model).where(*self._conditions(expressions, filters))
+
         if order_by:
             stmt = stmt.order_by(*(self._resolve_order(spec) for spec in order_by))
+
         if offset:
             stmt = stmt.offset(offset)
+
         if limit is not None:
             stmt = stmt.limit(limit)
+
         result = await session.execute(stmt)
         return result.scalars().all()
 
@@ -108,10 +126,19 @@ class CrudBase(Generic[ModelT]):
         self,
         session: AsyncSession,
         *,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None = None,
+        expressions: Sequence[ColumnElement] | None = None,
         **filters: Any,
     ) -> int:
-        """Count rows matching the filters."""
+        """Count rows matching the filters.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            The number of matching rows.
+        """
         stmt = select(func.count()).select_from(self.model).where(*self._conditions(expressions, filters))
         result = await session.execute(stmt)
         return result.scalar_one()
@@ -120,10 +147,19 @@ class CrudBase(Generic[ModelT]):
         self,
         session: AsyncSession,
         *,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None = None,
+        expressions: Sequence[ColumnElement] | None = None,
         **filters: Any,
     ) -> bool:
-        """Return ``True`` if at least one row matches the filters."""
+        """Check whether at least one row matches the filters.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            ``True`` if at least one matching row exists, ``False`` otherwise.
+        """
         stmt = select(exists().where(*self._conditions(expressions, filters)))
         result = await session.execute(stmt)
         return bool(result.scalar())
@@ -131,78 +167,196 @@ class CrudBase(Generic[ModelT]):
     # ── Update ───────────────────────────────────────────────────────────
 
     async def update(self, session: AsyncSession, obj: ModelT, **values: Any) -> ModelT:
-        """Update an ORM instance in place. Flushes; never commits."""
+        """Update an ORM instance in place.
+
+        Flushes; never commits.
+
+        Args:
+            session: The async session to use.
+            obj: The model instance to update.
+            **values: Field names and their new values.
+
+        Returns:
+            The updated model instance.
+
+        Raises:
+            AttributeError: If a key does not correspond to a mapped attribute.
+        """
         for key in values:
             self._attr(key)
+
         for key, value in values.items():
             setattr(obj, key, value)
+
         await session.flush()
         return obj
 
-    async def update_by_id(self, session: AsyncSession, id: str, **values: Any) -> int:
+    async def update_by_id(self, session: AsyncSession, id_: str, **values: Any) -> int:
         """Update a row by primary key with a single UPDATE statement.
 
-        Returns the number of affected rows (0 = not found or nothing to update).
+        Args:
+            session: The async session to use.
+            id_: The primary key value.
+            **values: Field names and their new values.
+
+        Returns:
+            The number of affected rows (0 = not found or nothing to update).
         """
         if not values:
             return 0
-        stmt = update(self.model).where(self.model.id == id).values(**values)
-        result = await session.execute(stmt)
+
+        stmt = update(self.model).where(self.model.id == id_).values(**values)
+        result = cast(CursorResult[Any], await session.execute(stmt))
         return result.rowcount or 0
 
     # ── Delete ───────────────────────────────────────────────────────────
 
-    async def delete(self, session: AsyncSession, obj: ModelT) -> None:
-        """Delete an ORM instance. Flushes; never commits."""
-        await session.delete(obj)
-        await session.flush()
+    async def delete_by_id(self, session: AsyncSession, id_: str) -> bool:
+        """Delete a row by primary key.
 
-    async def delete_by_id(self, session: AsyncSession, id: str) -> bool:
-        """Delete a row by primary key. Returns ``True`` if a row was deleted."""
-        stmt = delete(self.model).where(self.model.id == id)
-        result = await session.execute(stmt)
+        Args:
+            session: The async session to use.
+            id_: The primary key value.
+
+        Returns:
+            ``True`` if a row was deleted, ``False`` otherwise.
+        """
+        stmt = delete(self.model).where(self.model.id == id_)
+        result = cast(CursorResult[Any], await session.execute(stmt))
         return bool(result.rowcount)
 
     async def delete_where(
         self,
         session: AsyncSession,
         *,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None = None,
+        expressions: Sequence[ColumnElement] | None = None,
         **filters: Any,
     ) -> int:
-        """Delete all rows matching the filters. Returns the number of deleted rows."""
+        """Delete all rows matching the filters.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            The number of deleted rows.
+        """
         stmt = delete(self.model).where(*self._conditions(expressions, filters))
-        result = await session.execute(stmt)
+        result = cast(CursorResult[Any], await session.execute(stmt))
         return result.rowcount or 0
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
     def _attr(self, name: str) -> InstrumentedAttribute[Any]:
-        """Resolve a field name to a mapped attribute, failing fast on typos."""
+        """Resolve a field name to a mapped attribute.
+
+        Args:
+            name: The field name to resolve.
+
+        Returns:
+            The corresponding :class:`~sqlalchemy.orm.InstrumentedAttribute`.
+
+        Raises:
+            AttributeError: If the name does not correspond to a mapped attribute.
+        """
         attr = getattr(self.model, name, None)
+
         if not isinstance(attr, InstrumentedAttribute):
             raise AttributeError(f'{self.model.__name__} has no mapped attribute {name!r}')
+
         return attr
 
     def _conditions(
         self,
-        expressions: Sequence[ColumnExpressionArgument[bool]] | None,
+        expressions: Sequence[ColumnElement] | None,
         filters: Mapping[str, Any],
-    ) -> list[ColumnExpressionArgument[bool]]:
-        """Combine raw expressions and keyword filters into WHERE conditions."""
-        conditions: list[ColumnExpressionArgument[bool]] = list(expressions or [])
+    ) -> Sequence[ColumnElement]:
+        """Combine raw expressions and keyword filters into WHERE conditions.
+
+        Args:
+            expressions: Raw SQLAlchemy filter expressions.
+            filters: Equality keyword filters. Sequences (list, set, tuple,
+                frozenset) are converted to ``IN`` clauses; ``None`` values
+                become ``IS NULL`` checks.
+
+        Returns:
+            A list of column expressions suitable for ``.where()``.
+        """
+        conditions: list[ColumnElement] = list(expressions or [])
+
         for key, value in filters.items():
             column = self._attr(key)
+
             if isinstance(value, (list, set, tuple, frozenset)):
                 conditions.append(column.in_(value))
             else:
                 conditions.append(column == value)
+
         return conditions
 
-    def _resolve_order(self, spec: str | ColumnExpressionArgument[Any]) -> ColumnExpressionArgument[Any]:
-        """Convert an order-by spec into a column expression."""
+    def _resolve_order(self, spec: str | ColumnElement) -> ColumnElement:
+        """Convert an order-by spec into a column expression.
+
+        Args:
+            spec: A column expression, or a field name. Prefix with ``-``
+                for descending order (e.g. ``'-created_at'``).
+
+        Returns:
+            A column expression with the appropriate asc/desc direction.
+        """
         if isinstance(spec, str):
             descending = spec.startswith('-')
             column = self._attr(spec.lstrip('+-'))
             return column.desc() if descending else column.asc()
+
         return spec
+
+    # ── Static Methods ───────────────────────────────────────────────────
+
+    @staticmethod
+    async def create(session: AsyncSession, obj: ModelT) -> ModelT:
+        """Persist a new object.
+
+        Flushes so PKs / defaults are populated; never commits.
+
+        Args:
+            session: The async session to use.
+            obj: The model instance to persist.
+
+        Returns:
+            The same instance with populated defaults.
+        """
+        session.add(obj)
+        await session.flush()
+        return obj
+
+    @staticmethod
+    async def create_many(session: AsyncSession, objs: Sequence[ModelT]) -> Sequence[ModelT]:
+        """Persist multiple objects in one batch.
+
+        Flushes; never commits.
+
+        Args:
+            session: The async session to use.
+            objs: The model instances to persist.
+
+        Returns:
+            A list of the persisted instances.
+        """
+        session.add_all(objs)
+        await session.flush()
+        return objs
+
+    @staticmethod
+    async def delete(session: AsyncSession, obj: ModelT) -> None:
+        """Delete an ORM instance.
+
+        Flushes; never commits.
+
+        Args:
+            session: The async session to use.
+            obj: The model instance to delete.
+        """
+        await session.delete(obj)
+        await session.flush()
