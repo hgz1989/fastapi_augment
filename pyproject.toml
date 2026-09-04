@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastapi-augment"
+dynamic = ["version"]
+description = "FastAPI 通用代码工具包，跨项目复用"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "zarkhan", email = "hanguangzheng@qq.com" },
+]
+keywords = ["fastapi", "fastapi-augment", "augment", "web", "framework", "async"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
+]
+dependencies = [
+    "fastapi>=0.141.1",
+]
+
+[project.optional-dependencies]
+uvicorn = [
+    "uvicorn[standard]>=0.24.0",
+]
+
+sqlalchemy = [
+    "sqlalchemy[asyncio]>=2.0.52",
+    "python-ulid>=4.0.1",
+]
+
+orjson = [
+    "orjson>=3.10.0",
+]
+
+standard = [
+    "fastapi-augment[uvicorn,sqlalchemy,orjson]"
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.21.0",
+    "httpx2>=2.12.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["fastapi_augment*"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
