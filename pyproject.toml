@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fastapi-augment"
 dynamic = ["version"]
-description = "基于 FastAPI 封装的生产级 Web 应用框架"
+description = "FastAPI 通用代码工具包，跨项目复用"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

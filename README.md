@@ -1,26 +1,263 @@
 # fastapi-augment
 
-基于 FastAPI 封装的生产级 Web 应用框架，提供开箱即用的数据库引擎管理、异步 Session、通用 Mixin 与统一响应模型。
+跨项目复用的 FastAPI 通用代码工具包，将多个项目中反复用到的应用工厂、生命周期管理、读写分离数据库层、通用 Mixin、统一响应模型与 HTTP 异常体系统一封装，开箱即用。
+
+## 特性
+
+- **应用工厂** — 一行代码创建 FastAPI 实例，自动装配中间件、路由、生命周期与数据库
+- **生命周期管理** — 多注册表、优先级、超时控制、异常策略的启动/关闭钩子
+- **读写分离** — 单库 / 主从 / 集群拓扑的异步引擎管理，Session 自动路由
+- **泛型 CRUD** — 类型安全的异步 CRUD 仓库，支持关键字过滤与原生表达式
+- **可组合 Mixin** — 时间戳、审计、软删除等列混入，自由组合
+- **统一响应** — 全局 `APIResponse` 格式，自动追踪 `request_id`
+- **HTTP 异常** — 完整的 4xx 异常子类，内置默认文案
+- **OpenAPI 优化** — 自动清理 422 响应、可选 Bearer 认证
 
 ## 安装
 
 ```bash
-pip install fastapi_augment
+pip install fastapi-augment
 
-# 如需 SQLAlchemy 支持
-pip install fastapi_augment[sqlalchemy]
+# 推荐：安装全部可选依赖（uvicorn + sqlalchemy + orjson）
+pip install fastapi-augment[standard]
+
+# 或按需单独安装
+pip install fastapi-augment[sqlalchemy]
+pip install fastapi-augment[uvicorn]
+pip install fastapi-augment[orjson]
+```
+
+**要求：** Python >= 3.11
+
+## 快速开始
+
+```python
+from fastapi import APIRouter
+from fastapi_augment import create_app
+from fastapi_augment.db.sqlalchemy import (
+    ClusterTopology, NodeConfig, EngineManager, SessionFactory,
+    ModelBase, CrudBase, TimestampMixin,
+)
+from fastapi_augment.schemas import response_success
+
+# ── 1. 数据库拓扑 ──────────────────────────────────────
+topology = ClusterTopology(
+    primary=NodeConfig(url='postgresql+asyncpg://user:pass@host/db'),
+)
+manager = EngineManager(topology).start()
+sessions = SessionFactory(manager)
+
+
+# ── 2. 定义模型 ────────────────────────────────────────
+class User(TimestampMixin, ModelBase):
+    __tablename__ = 'users'
+    name: str
+
+
+# ── 3. 路由 ────────────────────────────────────────────
+router = APIRouter()
+user_crud = CrudBase(User)
+
+
+@router.get('/users')
+async def list_users():
+    async with sessions.read_session() as session:
+        users = await user_crud.list(session, is_active=True, limit=10)
+        return response_success(data=users)
+
+
+# ── 4. 创建应用 ────────────────────────────────────────
+app = create_app(
+    title='My Service',
+    version='1.0.0',
+    engine_manager=manager,
+    session_factory=sessions,
+    routers=[router],
+)
 ```
 
 ## 核心模块
 
-### db.sqlalchemy — 异步数据库层
+### 应用工厂 — `create_app()`
 
-- **EngineManager** — 单库 / 主从 / 集群拓扑的异步引擎生命周期管理
-- **SessionFactory** — 读写分离的异步 Session 工厂，支持 FastAPI `Depends()` 注入
-- **CrudBase** — 泛型异步 CRUD 仓库（create / get / list / update / delete / count / exists）
-- **ModelBase** — 基于 ULID 主键的模型基类
+统一创建 FastAPI 实例，自动装配以下组件：
 
-### db.sqlalchemy.mixins — 可组合列混入
+| 组件 | 说明 |
+|---|---|
+| 生命周期 | 接入 `fastapi_lifespan`，合并用户注册表与 `core_registry` |
+| 中间件 | 自动添加 `RequestIdMiddleware`，可选 CORS |
+| 路由 | 支持 `APIRouter` 列表或 `(router, kwargs)` 元组 |
+| OpenAPI | 自动清理 422 响应、可选 Bearer 认证 |
+| 数据库 | 可选挂载 `EngineManager` / `SessionFactory` 到 `app.state` |
+
+```python
+from fastapi_augment import create_app, HookRegistry
+
+registry = HookRegistry()
+
+@registry.on_startup
+async def init_cache() -> None:
+    ...
+
+app = create_app(
+    title='My Service',
+    registries=[registry],
+    cors_allow_origins=['*'],
+    openapi_enable_bearer_auth=True,
+)
+```
+
+### 生命周期 — `HookRegistry`
+
+多注册表、优先级驱动的启动/关闭钩子管理：
+
+```python
+from fastapi_augment import HookRegistry
+
+registry = HookRegistry()
+
+# 装饰器语法
+@registry.on_startup(priority=100)
+async def early_init() -> None: ...
+
+@registry.on_shutdown
+async def cleanup() -> None: ...
+
+# 直接注册
+registry.register_startup(func, priority=50, timeout=10, abort_on_exception=True)
+```
+
+- **优先级** — 数值越大越先执行（启动降序，关闭升序）
+- **超时控制** — 可设置单个钩子的超时秒数
+- **异常策略** — `abort_on_exception` 控制异常时是否终止流程
+
+### 数据库层 — `db.sqlalchemy`
+
+#### 引擎管理 — `EngineManager`
+
+支持三种部署拓扑：
+
+```python
+from fastapi_augment.db.sqlalchemy import ClusterTopology, NodeConfig, EngineManager
+
+# 单库
+topology = ClusterTopology(
+    primary=NodeConfig(url='postgresql+asyncpg://user:pass@host/db'),
+)
+
+# 主从
+topology = ClusterTopology(
+    primary=NodeConfig(url='postgresql+asyncpg://primary/db'),
+    replicas=[NodeConfig(url='postgresql+asyncpg://replica-1/db')],
+)
+
+# 集群（主从 + 独立只读节点）
+topology = ClusterTopology(
+    primary=NodeConfig(url='postgresql+asyncpg://primary/db'),
+    replicas=[NodeConfig(url='postgresql+asyncpg://replica-1/db')],
+    readonly=[NodeConfig(url='postgresql+asyncpg://readonly-1/db')],
+)
+
+manager = EngineManager(topology).start()
+# 读引擎轮询（round-robin）
+read_engine = manager.next_read_engine()
+```
+
+#### 会话工厂 — `SessionFactory`
+
+读写分离的异步 Session 工厂，支持 FastAPI `Depends()` 注入：
+
+```python
+from fastapi_augment.db.sqlalchemy import SessionFactory
+
+sessions = SessionFactory(manager)
+
+# 写会话（自动 commit/rollback）
+async with sessions.transaction() as session:
+    session.add(obj)
+    # 自动 commit
+
+# 读会话（轮询读引擎）
+async with sessions.read_session() as session:
+    result = await session.execute(select(User))
+
+# FastAPI 依赖注入
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+@router.get('/users')
+async def list_users(session: AsyncSession = Depends(sessions.depends_read)):
+    ...
+```
+
+#### 模型基类 — `ModelBase`
+
+基于 ULID 主键的声明式模型基类：
+
+```python
+from fastapi_augment.db.sqlalchemy import ModelBase, TimestampMixin
+
+class User(TimestampMixin, ModelBase):
+    __tablename__ = 'users'
+    name: str
+```
+
+#### 泛型 CRUD — `CrudBase`
+
+类型安全的异步 CRUD 仓库，CRUD 方法只 **flush**，不 commit，事务边界由调用方控制：
+
+```python
+from fastapi_augment.db.sqlalchemy import CrudBase
+
+user_crud = CrudBase(User)
+
+# Create（静态方法）
+async with sessions.transaction() as session:
+    await user_crud.create(session, User(name='alice'))
+    await user_crud.create_many(session, [User(name='bob'), User(name='carol')])
+
+# Read（实例方法）
+async with sessions.read_session() as session:
+    user = await user_crud.get(session, id_='01HXK...')
+    user = await user_crud.get_one(session, name='alice')
+    users = await user_crud.list(session, role='admin', order_by=['-created_at'], limit=10)
+    total = await user_crud.count(session, is_active=True)
+    has_admin = await user_crud.exists(session, role='admin')
+
+# Update
+async with sessions.transaction() as session:
+    await user_crud.update(session, user, name='new_name')
+    affected = await user_crud.update_by_id(session, id_='01HXK...', name='new_name')
+
+# Delete
+async with sessions.transaction() as session:
+    await user_crud.delete(session, user)
+    deleted = await user_crud.delete_by_id(session, id_='01HXK...')
+    count = await user_crud.delete_where(session, is_active=False)
+```
+
+**过滤语法：**
+
+```python
+# 关键字过滤 — 等值匹配
+await user_crud.list(session, name='alice')
+
+# 序列 — 自动转为 IN 查询
+await user_crud.list(session, id_=['01HXK...', '01HXL...'])
+
+# None — 自动转为 IS NULL
+await user_crud.list(session, deleted_at=None)
+
+# 原生 SQLAlchemy 表达式
+await user_crud.list(session, expressions=(User.age > 18,))
+
+# 排序：字段名前缀 - 表示降序
+await user_crud.list(session, order_by=['-created_at', 'name'])
+```
+
+### 模型 Mixin — `db.sqlalchemy.mixins`
+
+可组合的列混入，按需叠加：
 
 | Mixin | 提供的列 |
 |---|---|
@@ -31,36 +268,123 @@ pip install fastapi_augment[sqlalchemy]
 | `AuditMixin` | `created_by` + `updated_by` |
 | `SoftDeleteMixin` | `is_deleted` + `deleted_at` |
 
-### schemas — 统一请求 / 响应模型
+```python
+from fastapi_augment.db.sqlalchemy import ModelBase, TimestampMixin, SoftDeleteMixin
 
-- **APIResponse** — 全局统一返回格式（`request_id` / `code` / `message` / `data` / `extra`）
-- **PageData** — 通用分页响应
-- **PageParams / TimeRangeParams / KeywordParams** — 常用请求参数
-- 全局驼峰别名、时间序列化开箱即用
+class User(TimestampMixin, SoftDeleteMixin, ModelBase):
+    __tablename__ = 'users'
+    name: str
+```
 
-## 快速开始
+### 统一响应 — `schemas`
+
+#### `APIResponse` — 全局返回格式
+
+```json
+{
+    "request_id": "019xxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "code": 0,
+    "message": "操作成功",
+    "data": { ... },
+    "extra": null
+}
+```
+
+`request_id` 自动从 `ContextVar` 获取，无需手动传递。
+
+#### 工厂函数
 
 ```python
-from fastapi_augment.db.sqlalchemy import (
-    ClusterTopology, EngineManager, NodeConfig,
-    SessionFactory, ModelBase, CrudBase, TimestampMixin,
+from fastapi_augment.schemas import response_success, response_fail
+
+# 成功响应
+return response_success(data=user)
+return response_success(data=users, extra={'total': 100})
+
+# 失败响应
+return response_fail(code=40001, message='用户名已存在')
+```
+
+#### 请求参数模型
+
+```python
+from fastapi_augment.schemas import PageParams, TimeRangeParams, KeywordParams
+
+# 分页参数
+@router.get('/users')
+async def list_users(params: PageParams = Depends()):
+    ...
+
+# 时间范围 + 关键词搜索
+@router.get('/orders')
+async def list_orders(
+    time_range: TimeRangeParams = Depends(),
+    keyword: KeywordParams = Depends(),
+):
+    ...
+```
+
+### HTTP 异常 — `common.exceptions`
+
+完整的 4xx 异常子类，内置默认文案：
+
+```python
+from fastapi_augment.common.exceptions import (
+    BadRequestError,        # 400
+    UnauthorizedError,      # 401
+    ForbiddenError,         # 403
+    NotFoundError,          # 404
+    ConflictError,          # 409
+    # ... 更多异常
 )
 
-# 1. 配置拓扑
-topology = ClusterTopology(
-    primary=NodeConfig(url='postgresql+asyncpg://user:pass@host/db'),
-)
-manager = EngineManager(topology).start()
-factory = SessionFactory(manager)
+# 使用默认文案
+raise NotFoundError()
 
-# 2. 定义模型
-class User(TimestampMixin, ModelBase):
-    __tablename__ = 'users'
+# 自定义提示
+raise BadRequestError(detail='用户名不能为空')
+```
 
-# 3. 使用 CRUD
-async with factory.transaction() as session:
-    crud = CrudBase(User)
-    user = await crud.create(session, User(name='alice'))
+### 中间件 — `middlewares`
+
+#### `RequestIdMiddleware`
+
+自动为每个请求生成/传递 `request_id`（ULID 格式），通过 `ContextVar` 在全链路中可用：
+
+```python
+from fastapi_augment.middlewares import get_request_id
+
+request_id = get_request_id()
+```
+
+## 项目结构
+
+```
+fastapi_augment/
+├── common/
+│   ├── constants.py          # 全局常量与默认错误文案
+│   ├── exceptions.py         # 4xx HTTP 异常体系
+│   ├── exception_handlers.py # 全局异常处理器
+│   └── utils/
+│       └── strings.py        # 字符串工具
+├── db/
+│   └── sqlalchemy/
+│       ├── engine.py         # EngineManager / NodeConfig / ClusterTopology
+│       ├── session.py        # SessionFactory（读写分离）
+│       ├── model_base.py     # ModelBase（ULID 主键）
+│       ├── crud_base.py      # CrudBase（泛型 CRUD）
+│       └── mixins/           # Timestamp / Audit / SoftDelete
+├── middlewares/
+│   ├── base.py               # BaseASGIMiddleware
+│   └── request_id.py         # RequestId 中间件
+├── schemas/
+│   ├── base.py               # ORMSchemaBase / APISchemaBase
+│   ├── request.py            # PageParams / TimeRangeParams / KeywordParams
+│   ├── response.py           # APIResponse / response_success / response_fail
+│   └── pagination.py         # PageData 分页模型
+├── factory.py                # create_app 应用工厂
+├── lifespan.py               # HookRegistry 生命周期管理
+└── openapi.py                # OpenAPI schema 优化
 ```
 
 ## 许可证
