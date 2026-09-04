@@ -1,0 +1,20 @@
+# PyCharm 只忽略私有文件，保留共享项目配置
+.idea/
+
+# 虚拟环境
+.venv/
+venv/
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 打包构建输出
+dist/
+build/
+*.egg-info/
+
+# uv缓存
+.uv/
