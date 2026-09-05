@@ -9,7 +9,7 @@ from typing import Generic, overload
 
 from pydantic import Field
 
-from .base import APISchemaBase
+from .base import SchemaBase
 from .types import T, E
 
 CODE_SUCCESS = 0
@@ -27,7 +27,7 @@ def _default_request_id() -> str:
 
 
 # ====================== API响应模型 ======================
-class APIResponse(APISchemaBase, Generic[T, E]):
+class APIResponse(SchemaBase, Generic[T, E]):
     """全局统一返回格式
 
     request_id: 自动从 ContextVar 获取当前请求ID；无请求上下文返回空字符串

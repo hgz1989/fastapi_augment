@@ -6,15 +6,15 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Sequence, Generic
+from typing import Generic, Sequence
 
 from pydantic import Field
 
-from .base import APISchemaBase
+from .base import SchemaBase
 from .types import T
 
 
-class PageData(APISchemaBase, Generic[T]):
+class PageData(SchemaBase, Generic[T]):
     """通用分页返回体"""
     items: Sequence[T] = Field(default_factory=list, description='当前页数据列表')
     page: int = Field(default=1, description='当前页码')

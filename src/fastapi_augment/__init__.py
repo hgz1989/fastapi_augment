@@ -20,5 +20,5 @@ __all__ = [
     'HookRegistry',
     'core_registry',
     'fastapi_lifespan',
-    'clear_hooks',
+    'clear_hooks'
 ]
