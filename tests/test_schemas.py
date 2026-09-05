@@ -55,7 +55,7 @@ class TestORMSchemaBase:
         dt = datetime(2026, 9, 4, 12, 0, 0)
         obj = MySchema(ts=dt)
         json_str = obj.model_dump_json()
-        assert '2026-09-04 12:00:00' in json_str
+        assert '2026-09-04T12:00:00' in json_str
 
     def test_date_json_encoder(self):
         class MySchema(ORMSchemaBase):
