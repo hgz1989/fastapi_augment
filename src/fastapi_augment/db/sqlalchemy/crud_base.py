@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from math import ceil
 from typing import Any, Generic, TypeVar, cast
 
 from sqlalchemy import ColumnElement, delete, exists, func, select, update
@@ -64,11 +65,11 @@ class CrudBase(Generic[ModelT]):
         return await session.get(self.model, id_)
 
     async def get_one(
-        self,
-        session: AsyncSession,
-        *,
-        expressions: Sequence[ColumnElement] | None = None,
-        **filters: Any,
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
     ) -> ModelT | None:
         """Fetch the first row matching the filters.
 
@@ -85,14 +86,14 @@ class CrudBase(Generic[ModelT]):
         return result.scalars().first()
 
     async def list(
-        self,
-        session: AsyncSession,
-        *,
-        expressions: Sequence[ColumnElement] | None = None,
-        order_by: Sequence[str | ColumnElement] | None = None,
-        offset: int = 0,
-        limit: int | None = 100,
-        **filters: Any,
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            order_by: Sequence[str | ColumnElement] | None = None,
+            offset: int = 0,
+            limit: int | None = 100,
+            **filters: Any,
     ) -> Sequence[ModelT]:
         """Fetch rows matching the filters with optional ordering / pagination.
 
@@ -123,11 +124,11 @@ class CrudBase(Generic[ModelT]):
         return result.scalars().all()
 
     async def count(
-        self,
-        session: AsyncSession,
-        *,
-        expressions: Sequence[ColumnElement] | None = None,
-        **filters: Any,
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
     ) -> int:
         """Count rows matching the filters.
 
@@ -143,12 +144,75 @@ class CrudBase(Generic[ModelT]):
         result = await session.execute(stmt)
         return result.scalar_one()
 
+    async def paginate(
+            self,
+            session: AsyncSession,
+            *,
+            page: int = 1,
+            size: int = 10,
+            expressions: Sequence[ColumnElement] | None = None,
+            order_by: Sequence[str | ColumnElement] | None = None,
+            **filters: Any,
+    ) -> dict[str, Any]:
+        """分页查询，自动执行 count + list 并返回分页结果字典。
+
+        内部复用 ``_conditions`` 保证 count 与 list 使用完全相同的过滤条件，
+        避免调用方手动写两遍 filter::
+
+            result = await crud.paginate(
+                session, page=1, size=10,
+                is_active=True, order_by=['-created_at'],
+            )
+            # result = {'items': [...], 'page': 1, 'size': 10, 'total': 100, 'pages': 10}
+
+            # 可配合 PageData 使用
+            from fastapi_augment.schemas import PageData
+            page_data = PageData.build(result['items'], page=result['page'],
+                                         size=result['size'], total=result['total'])
+
+        Args:
+            session: The async session to use (typically a read session).
+            page: 当前页码（从 1 开始）
+            size: 每页数量
+            expressions: Raw SQLAlchemy filter expressions.
+            order_by: Column expressions or field names; prefix ``-`` for descending.
+            **filters: Equality keyword filters.
+
+        Returns:
+            包含 items / page / size / total / pages 的字典。
+        """
+
+        conditions = self._conditions(expressions, filters)
+
+        # count
+        count_stmt = select(func.count()).select_from(self.model).where(*conditions)
+        total = (await session.execute(count_stmt)).scalar_one()
+
+        # list
+        offset = (page - 1) * size
+        list_stmt = select(self.model).where(*conditions)
+
+        if order_by:
+            list_stmt = list_stmt.order_by(*(self._resolve_order(spec) for spec in order_by))
+
+        list_stmt = list_stmt.offset(offset).limit(size)
+        items = (await session.execute(list_stmt)).scalars().all()
+
+        pages = ceil(total / size) if size > 0 else 0
+        return {
+            'items': items,
+            'page': page,
+            'size': size,
+            'total': total,
+            'pages': pages,
+        }
+
     async def exists(
-        self,
-        session: AsyncSession,
-        *,
-        expressions: Sequence[ColumnElement] | None = None,
-        **filters: Any,
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
     ) -> bool:
         """Check whether at least one row matches the filters.
 
@@ -226,11 +290,11 @@ class CrudBase(Generic[ModelT]):
         return bool(result.rowcount)
 
     async def delete_where(
-        self,
-        session: AsyncSession,
-        *,
-        expressions: Sequence[ColumnElement] | None = None,
-        **filters: Any,
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
     ) -> int:
         """Delete all rows matching the filters.
 
@@ -268,9 +332,9 @@ class CrudBase(Generic[ModelT]):
         return attr
 
     def _conditions(
-        self,
-        expressions: Sequence[ColumnElement] | None,
-        filters: Mapping[str, Any],
+            self,
+            expressions: Sequence[ColumnElement] | None,
+            filters: Mapping[str, Any],
     ) -> Sequence[ColumnElement]:
         """Combine raw expressions and keyword filters into WHERE conditions.
 

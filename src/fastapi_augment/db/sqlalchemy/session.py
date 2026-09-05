@@ -60,6 +60,9 @@ class SessionFactory:
             **self._session_kwargs,
         )
 
+        # 缓存读引擎对应的 session factory，避免每次 read_session 重复创建
+        self._read_factories: dict[str, async_sessionmaker[AsyncSession]] = {}
+
     # ── Properties ───────────────────────────────────────────────────────
 
     @property
@@ -92,12 +95,18 @@ class SessionFactory:
             An async session bound to a read engine.
         """
         read_engine = self._manager.next_read_engine()
-        factory = async_sessionmaker(
-            bind=read_engine,
-            class_=AsyncSession,
-            expire_on_commit=self._expire_on_commit,
-            **self._session_kwargs,
-        )
+        engine_key = id(read_engine)
+
+        factory = self._read_factories.get(engine_key)
+        if factory is None:
+            factory = async_sessionmaker(
+                bind=read_engine,
+                class_=AsyncSession,
+                expire_on_commit=self._expire_on_commit,
+                **self._session_kwargs,
+            )
+            self._read_factories[engine_key] = factory
+
         async with factory() as session:
             yield session
 
@@ -126,8 +135,6 @@ class SessionFactory:
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[AsyncSession, None]:
         """Write session with automatic commit / rollback.
-
-        Write session with automatic commit / rollback.
 
         Commits on clean exit, rolls back on any exception::
 

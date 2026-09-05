@@ -38,15 +38,24 @@ uvicorn = [
 sqlalchemy = [
     "sqlalchemy[asyncio]>=2.0.52",
     "python-ulid>=4.0.1",
+    "alembic>=1.19.2",
 ]
 
 orjson = [
     "orjson>=3.10.0",
 ]
 
-standard = [
-    "fastapi-augment[uvicorn,sqlalchemy,orjson]"
+config = [
+    "pydantic-settings>=2.15.0",
 ]
+
+standard = [
+    "fastapi-augment[uvicorn,sqlalchemy,orjson,config]"
+]
+
+# ======== 新增 CLI 入口 ========
+[project.scripts]
+fastapi-augment-migrate = "fastapi_augment.db.sqlalchemy.migrate:cli_main"
 
 [dependency-groups]
 dev = [
@@ -61,7 +70,12 @@ where = ["src"]
 include = ["fastapi_augment*"]
 
 [tool.setuptools.package-data]
-"*" = ["py.typed"]
+fastapi_augment = [
+    "py.typed",
+    "db/sqlalchemy/migrations/*.py",
+    "db/sqlalchemy/migrations/*.mako",
+    "db/sqlalchemy/migrations/README",
+]
 
 [tool.setuptools.dynamic]
 version = { file = "VERSION" }

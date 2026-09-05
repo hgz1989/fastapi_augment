@@ -1,0 +1,198 @@
+"""
+@Author     : zarkhan
+@CreateDate : 2026/9/6
+@Description: 日志配置与管理——日志格式、级别、轮转、控制台/文件输出
+"""
+import logging
+import sys
+from pathlib import Path
+
+from .factory import install_request_id_factory
+from .filters import UvicornNameRewriteFilter
+from .handlers import (
+    MonthlyRotatingFileHandler,
+    MultiProcessTimedRotatingFileHandler,
+    YearlyRotatingFileHandler,
+)
+
+# -------------------------------------
+# 日志格式
+# -------------------------------------
+NORMAL_FORMAT = (
+    '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(process)d:%(thread)-12d | '
+    '%(name)-30.30s | %(lineno)-5d | %(request_id)-32.32s | %(message)s'
+)
+_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# 轮转周期映射：语义字符串 → (when, interval)，month/year 使用自定义Handler
+_ROTATION_MAP: dict[str, tuple[str, int] | None] = {
+    'second': ('S', 1),
+    'minute': ('M', 1),
+    'hour': ('H', 1),
+    'day': ('midnight', 1),
+    'week': ('W0', 1),
+    'month': None,
+    'year': None,
+}
+
+# 需要接管的日志名称（清空默认处理器，走根日志）
+_TAKEOVER_LOGGERS = ('uvicorn', 'uvicorn.access', 'uvicorn.error', 'fastapi')
+
+
+def _takeover_uvicorn() -> None:
+    """强制接管uvicorn/fastapi日志：清空handler、propagate回根、附加名称重写过滤器"""
+    for logger_name in _TAKEOVER_LOGGERS:
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
+        logger.propagate = True
+        logger.setLevel(logging.INFO)
+
+        if logger_name in ('uvicorn.error', 'uvicorn.access'):
+            logger.addFilter(UvicornNameRewriteFilter())
+
+    # 屏蔽第三方库DEBUG噪声
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+
+
+def _init_root_logger() -> None:
+    """初始化根日志：安装request_id工厂、设置格式、接管uvicorn"""
+    install_request_id_factory()
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=NORMAL_FORMAT,
+        datefmt=_DATE_FORMAT,
+        force=True,
+    )
+    _takeover_uvicorn()
+
+
+# 包导入时自动执行一次初始化
+_init_root_logger()
+
+
+# -------------------------------------
+# 对外API
+# -------------------------------------
+def set_log_level(level: str | int) -> None:
+    """修改全局日志级别（包括FastAPI/Uvicorn所有日志）
+
+    Args:
+        level: 支持传入 'debug' / 'info' / 'warn' / 'error' 或logging.DEBUG等
+    """
+    if isinstance(level, str):
+        level = level.upper()
+        level = getattr(logging, level, logging.INFO)
+
+    logging.getLogger().setLevel(level)
+
+
+def set_log_format(log_format: str) -> None:
+    """修改全局日志格式，所有输出立即生效
+
+    Args:
+        log_format: 新的日志格式字符串
+    """
+    root_logger = logging.getLogger()
+    formatter = logging.Formatter(log_format)
+
+    for handler in root_logger.handlers:
+        handler.setFormatter(formatter)
+
+
+def setup_logger(
+    log_dir: str | Path | None = None,
+    filename: str = 'app.log',
+    rotation: str = 'day',
+    backup_count: int = 30,
+    encoding: str = 'utf-8',
+    enable_console: bool = True,
+) -> None:
+    """一键配置应用日志（支持控制台开关与文件日志）
+
+    支持以整点为节点的日志轮转，可选粒度：
+    - ``'second'`` — 每整秒
+    - ``'minute'`` — 每整分钟（:00秒）
+    - ``'hour'``   — 每整点小时（:00分）
+    - ``'day'``    — 每天00:00（默认）
+    - ``'week'``   — 每周一00:00
+    - ``'month'``  — 每月1日00:00
+    - ``'year'``   — 每年1月1日00:00
+
+    Args:
+        log_dir: 日志保存目录，若不提供则不开启文件日志
+        filename: 日志文件名
+        rotation: 轮转粒度，见上方说明，默认 ``'day'``
+        backup_count: 保留的历史日志文件数量
+        encoding: 文件编码
+        enable_console: 是否在控制台输出日志
+    """
+    root_logger = logging.getLogger()
+
+    # 1. 获取现有formatter
+    current_formatter = None
+    for h in root_logger.handlers:
+        if h.formatter:
+            current_formatter = h.formatter
+            break
+
+    if not current_formatter:
+        current_formatter = logging.Formatter(NORMAL_FORMAT, datefmt=_DATE_FORMAT)
+
+    # 2. 控制台输出
+    if enable_console:
+        has_console = any(
+            isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+            for h in root_logger.handlers
+        )
+        if not has_console:
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(current_formatter)
+            root_logger.addHandler(console_handler)
+    else:
+        handlers_to_remove = [
+            h for h in root_logger.handlers
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        ]
+        for h in handlers_to_remove:
+            root_logger.removeHandler(h)
+
+    # 3. 文件输出
+    if log_dir:
+        log_dir = Path(log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_path = log_dir / filename
+
+        has_file_handler = any(
+            isinstance(h, logging.FileHandler)
+            and getattr(h, 'baseFilename', '') == str(file_path.absolute())
+            for h in root_logger.handlers
+        )
+
+        if not has_file_handler:
+            rotation_key = rotation.lower()
+
+            if rotation_key not in _ROTATION_MAP:
+                raise ValueError(
+                    f'不支持的轮转粒度 {rotation!r}，'
+                    f'可选值：{list(_ROTATION_MAP.keys())}'
+                )
+
+            if rotation_key == 'month':
+                file_handler = MonthlyRotatingFileHandler(
+                    str(file_path), backup_count=backup_count, encoding=encoding
+                )
+            elif rotation_key == 'year':
+                file_handler = YearlyRotatingFileHandler(
+                    str(file_path), backup_count=backup_count, encoding=encoding
+                )
+            else:
+                when, interval = _ROTATION_MAP[rotation_key]
+                file_handler = MultiProcessTimedRotatingFileHandler(
+                    filename=str(file_path), when=when, interval=interval,
+                    backupCount=backup_count, encoding=encoding
+                )
+
+            file_handler.setFormatter(current_formatter)
+            root_logger.addHandler(file_handler)

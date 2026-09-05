@@ -285,3 +285,64 @@ class TestCrudHelpers:
         col_expr = UserItem.name.asc()
         result = crud._resolve_order(col_expr)
         assert result is col_expr
+
+
+# ── Paginate ──────────────────────────────────────────────────────────
+
+class TestCrudPaginate:
+
+    async def test_paginate_returns_dict(self, session: AsyncSession, crud: CrudBase):
+        """paginate 返回正确的分页字典结构"""
+        for i in range(5):
+            await CrudBase.create(session, UserItem(name=f'user_{i}', role='user'))
+
+        result = await crud.paginate(session, page=1, size=3)
+
+        assert result['page'] == 1
+        assert result['size'] == 3
+        assert result['total'] == 5
+        assert result['pages'] == 2
+        assert len(result['items']) == 3
+
+    async def test_paginate_second_page(self, session: AsyncSession, crud: CrudBase):
+        """paginate 第二页数据正确"""
+        for i in range(5):
+            await CrudBase.create(session, UserItem(name=f'user_{i}', role='user'))
+
+        result = await crud.paginate(session, page=2, size=3)
+
+        assert result['page'] == 2
+        assert result['total'] == 5
+        assert result['pages'] == 2
+        assert len(result['items']) == 2
+
+    async def test_paginate_with_filters(self, session: AsyncSession, crud: CrudBase):
+        """paginate 过滤条件同时作用于 count 和 list"""
+        await CrudBase.create(session, UserItem(name='admin', role='admin'))
+        await CrudBase.create(session, UserItem(name='user1', role='user'))
+        await CrudBase.create(session, UserItem(name='user2', role='user'))
+
+        result = await crud.paginate(session, page=1, size=10, role='admin')
+
+        assert result['total'] == 1
+        assert len(result['items']) == 1
+        assert result['items'][0].name == 'admin'
+
+    async def test_paginate_empty(self, session: AsyncSession, crud: CrudBase):
+        """无数据时返回空列表、total=0"""
+        result = await crud.paginate(session, page=1, size=10)
+
+        assert result['total'] == 0
+        assert result['pages'] == 0
+        assert len(result['items']) == 0
+
+    async def test_paginate_with_order(self, session: AsyncSession, crud: CrudBase):
+        """paginate 支持排序"""
+        await CrudBase.create(session, UserItem(name='charlie', role='user'))
+        await CrudBase.create(session, UserItem(name='alice', role='user'))
+        await CrudBase.create(session, UserItem(name='bob', role='user'))
+
+        result = await crud.paginate(session, page=1, size=10, order_by=['name'])
+
+        names = [item.name for item in result['items']]
+        assert names == ['alice', 'bob', 'charlie']

@@ -197,3 +197,43 @@ class TestCreateAppCORS:
             }
         )
         assert 'access-control-allow-origin' not in resp.headers
+
+
+# ── 健康检查开关 ─────────────────────────────────────────────────────
+
+class TestHealthCheckToggle:
+
+    def test_health_check_disabled_by_default(self):
+        """默认不注册健康检查端点"""
+        app = create_app()
+        client = TestClient(app)
+        resp = client.get('/health')
+        assert resp.status_code == 404
+
+    def test_health_check_enabled(self):
+        """health_check=True 注册端点，无数据库时返回 healthy"""
+        app = create_app(health_check=True)
+        client = TestClient(app)
+
+        resp = client.get('/health')
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['status'] == 'healthy'
+        assert any(c['name'] == 'app' for c in data['checks'])
+
+    def test_health_check_sets_start_time(self):
+        """health_check=True 时设置 start_time"""
+        app = create_app(health_check=True)
+        assert hasattr(app.state, 'start_time')
+        assert app.state.start_time > 0
+
+    def test_health_check_with_db_no_engine(self):
+        """health_check=True 但无 engine_manager 时，数据库检查返回 unhealthy"""
+        app = create_app(health_check=True)
+        client = TestClient(app)
+
+        resp = client.get('/health')
+        # 无 engine_manager，include_db_check=False，所以只有 app 检查
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data['checks']) == 1

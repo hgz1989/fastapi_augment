@@ -37,7 +37,7 @@ class PageData(SchemaBase, Generic[T]):
             items: 当前页数据列表
             page: 当前页码
             size: 每页数量
-            total:
+            total: 总记录数
 
         Returns:
             分页对象
