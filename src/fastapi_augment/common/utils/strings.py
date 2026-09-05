@@ -143,8 +143,7 @@ def json_loads(s: str | bytes) -> Any:
     except json.JSONDecodeError:
         raise
     except (TypeError, ValueError) as e:
-        text = s if isinstance(s, str) else s.decode('utf-8', errors='replace')
-        raise json.JSONDecodeError(str(e), text, 0) from e
+        raise json.JSONDecodeError(str(e), s, 0) from e
 
 
 def json_load(fp: SupportsReadBytes) -> Any:

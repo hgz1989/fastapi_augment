@@ -69,7 +69,7 @@ async def http_exception_handler(
     """
     body = response_fail(
         code=exc.status_code,
-        message=exc.detail if isinstance(exc.detail, str) else str(exc.detail),
+        message=exc.detail if isinstance(exc.detail, str) else str(exc.detail or ''),
     )
     return JSONResponse(
         status_code=exc.status_code,

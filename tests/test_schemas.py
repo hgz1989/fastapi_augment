@@ -6,7 +6,7 @@ from datetime import datetime, date
 import pytest
 from pydantic import ValidationError
 
-from fastapi_augment.schemas.base import ORMSchemaBase, APISchemaBase
+from fastapi_augment.schemas.base import ORMSchemaBase, SchemaBase
 from fastapi_augment.schemas.pagination import PageData
 from fastapi_augment.schemas.request import PageParams, TimeRangeParams, KeywordParams
 from fastapi_augment.schemas.response import (
@@ -72,11 +72,11 @@ class TestAPISchemaBase:
 
     def test_no_from_attributes(self):
         """APISchemaBase 关闭了 from_attributes"""
-        config = APISchemaBase.model_config
+        config = SchemaBase.model_config
         assert config.get('from_attributes', False) is False
 
     def test_camel_case_alias(self):
-        class MyOutput(APISchemaBase):
+        class MyOutput(SchemaBase):
             item_name: str = ''
 
         obj = MyOutput(itemName='test')
