@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Sequence, Generic
+from typing import Generic, Sequence
 
 from pydantic import Field
 

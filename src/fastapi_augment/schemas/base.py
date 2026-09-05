@@ -5,29 +5,11 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, date
-
-from pydantic import field_serializer, BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 
-class _TimeSerializer:
-    """时间序列化混入，统一 datetime / date 的 JSON 输出格式。
-
-    datetime → 'YYYY-MM-DD HH:MM:SS'（空格分隔）
-    date     → 'YYYY-MM-DD'
-    """
-
-    @field_serializer('*', when_used='json')
-    def _serialize_time(self, value: object) -> object:
-        if isinstance(value, datetime):
-            return value.isoformat(sep=' ', timespec='milliseconds').replace('+00:00', 'Z')
-        if isinstance(value, date):
-            return value.isoformat()
-        return value
-
-
-class SchemaBase(_TimeSerializer, BaseModel):
+class SchemaBase(BaseModel):
     """
     API对外输出基类：仅用于接口返回JSON，**不做ORM读取**
     关闭 from_attributes，避免误用；保留驼峰、时间序列化
