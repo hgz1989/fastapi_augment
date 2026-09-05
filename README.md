@@ -12,6 +12,7 @@
 - **统一响应** — 全局 `APIResponse` 格式，自动追踪 `request_id`
 - **HTTP 异常** — 完整的 4xx 异常子类，内置默认文案
 - **OpenAPI 优化** — 自动清理 422 响应、可选 Bearer 认证
+- **数据库迁移 CLI** — 一行命令生成/执行迁移，自动发现用户模型
 
 ## 安装
 
@@ -255,6 +256,99 @@ await user_crud.list(session, expressions=(User.age > 18,))
 await user_crud.list(session, order_by=['-created_at', 'name'])
 ```
 
+### 数据库迁移 CLI — `fastapi-augment-migrate`
+
+内置 Alembic 迁移工具，提供 `init` / `generate` / `upgrade` 三个子命令，开箱即用。
+
+#### 快速开始
+
+```bash
+# 1. 初始化（一次性操作，生成 alembic.ini + migrations/versions/）
+fastapi-augment-migrate init --db-url "sqlite:///test.db"
+
+# 2. 生成迁移
+fastapi-augment-migrate generate \
+    --message "add_user_table" \
+    --models "models,apps.ai.models"
+
+# 3. 执行迁移
+fastapi-augment-migrate upgrade
+```
+
+#### 初始化 — `init`
+
+在项目根目录生成 `alembic.ini` 和 `migrations/versions/` 目录。
+若 `alembic.ini` 已存在则跳过，不会覆盖。
+
+```bash
+# 初始化
+fastapi-augment-migrate init --db-url "sqlite:///test.db"
+
+# 指定项目根目录
+fastapi-augment-migrate init --db-url "postgresql+asyncpg://user:pass@host/db" --project-dir /path/to/project
+```
+
+`alembic.ini` 中的 `script_location` 指向库内的 `env.py`，`version_locations` 指向本地 `migrations/versions/`。
+`env.py` 通过环境变量 `FASTAPI_AUGMENT_MODELS` 动态导入用户模型，无需手动修改。
+
+#### 生成迁移 — `generate`
+
+通过 `--models` 指定模型模块（逗号分隔），调用 `alembic revision --autogenerate` 生成迁移脚本。
+需要先执行 `init` 初始化。
+
+```bash
+# 生成迁移
+fastapi-augment-migrate generate \
+    --message "add_user_table" \
+    --models "models,apps.ai.models"
+
+# 指定项目根目录
+fastapi-augment-migrate generate \
+    --message "add_item" \
+    --models "apps.ai.models" \
+    --project-dir /path/to/project
+```
+
+迁移文件生成在 `<项目根>/migrations/versions/` 目录下。
+
+#### 升级 / 降级 — `upgrade`
+
+`--db-url` 为可选参数，不传时直接从 `alembic.ini` 读取 `sqlalchemy.url`。
+
+```bash
+# 升级到最新版本（从 alembic.ini 读取数据库 URL）
+fastapi-augment-migrate upgrade
+
+# 指定数据库 URL（覆盖 alembic.ini 中的配置）
+fastapi-augment-migrate upgrade --db-url "sqlite:///test.db"
+
+# 升级到指定版本
+fastapi-augment-migrate upgrade --revision abc123
+
+# 降级一个版本
+fastapi-augment-migrate upgrade --downgrade
+
+# 降级到指定版本
+fastapi-augment-migrate upgrade --downgrade --revision abc123
+
+# 指定项目根目录
+fastapi-augment-migrate upgrade --project-dir /path/to/project
+```
+
+#### CLI 参数一览
+
+| 子命令 | 参数 | 说明 |
+|---|---|---|
+| `init` | `--db-url` | 数据库 URL（默认 `sqlite:///app.db`） |
+| | `--project-dir` | 项目根目录（默认当前目录） |
+| `generate` | `--message` | **必填**，迁移描述 |
+| | `--models` | **必填**，模型模块路径，逗号分隔 |
+| | `--project-dir` | 项目根目录（默认当前目录） |
+| `upgrade` | `--db-url` | 数据库 URL（不传则从 alembic.ini 读取） |
+| | `--revision` | 目标版本（默认 `head`） |
+| | `--downgrade` | 降级模式 |
+| | `--project-dir` | 项目根目录（默认当前目录） |
+
 ### 模型 Mixin — `db.sqlalchemy.mixins`
 
 可组合的列混入，按需叠加：
@@ -373,6 +467,8 @@ fastapi_augment/
 │       ├── session.py        # SessionFactory（读写分离）
 │       ├── model_base.py     # ModelBase（ULID 主键）
 │       ├── crud_base.py      # CrudBase（泛型 CRUD）
+│       ├── migrate.py        # 数据库迁移 CLI
+│       ├── migrations/       # Alembic 迁移环境（env.py / script.py.mako）
 │       └── mixins/           # Timestamp / Audit / SoftDelete
 ├── middlewares/
 │   ├── base.py               # BaseASGIMiddleware
