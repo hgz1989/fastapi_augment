@@ -8,7 +8,6 @@
 """
 from __future__ import annotations
 
-from logging import getLogger
 from time import time
 from typing import Sequence, Callable, Any
 
@@ -20,8 +19,6 @@ from .lifespan import HookRegistry, fastapi_lifespan
 from .middlewares import RequestIdMiddleware
 from .openapi import configure_openapi_schema, OpenAPICustomConfig
 from .health import create_health_router
-
-_logger = getLogger(__name__)
 
 # -------------------------- 类型别名 --------------------------
 # 路由注册回调：接收 app 实例，负责 include_router 等操作
@@ -219,7 +216,6 @@ def create_app(
         app.state.start_time = time()
         app.include_router(create_health_router(include_db_check=engine_manager is not None))
 
-    _logger.info(f'应用 [{title}] v{version} 创建完成')
     return app
 
 
