@@ -39,7 +39,7 @@ def create_app(
         cors_allow_methods: Sequence[str] | None = None,
         cors_allow_headers: Sequence[str] | None = None,
         # 生命周期钩子
-        registries: Sequence[HookRegistry] | HookRegistry | None = None,
+        registries: Sequence[HookRegistry] | None = None,
         # 中间件
         middlewares: Sequence[Middleware] | None = None,
         # 路由注册
@@ -109,7 +109,7 @@ def create_app(
         cors_allow_origins: CORS 允许的源列表，None=不启用CORS
         cors_allow_methods: CORS 允许的 HTTP 方法列表，None=不启用CORS
         cors_allow_headers: CORS 允许的 HTTP 头列表，None=不启用CORS
-        registries: 生命周期钩子注册表（单个或列表）
+        registries: 生命周期钩子注册表
         middlewares: Starlette 中间件列表
         routers: 路由列表，元素可以是 APIRouter 或 (router, kwargs) 元组
         route_registrars: 路由注册回调列表，接收 app 参数
@@ -222,7 +222,7 @@ def create_app(
 # -------------------------- 内部辅助 --------------------------
 
 def _resolve_registries(
-        registries: Sequence[HookRegistry] | HookRegistry | None,
+        registries: Sequence[HookRegistry] | None,
 ) -> list[HookRegistry]:
     """将 registries 参数规范化为列表。
 
@@ -234,6 +234,5 @@ def _resolve_registries(
     """
     if registries is None:
         return []
-    if isinstance(registries, HookRegistry):
-        return [registries]
+
     return list(registries)

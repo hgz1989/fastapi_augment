@@ -50,17 +50,16 @@ def _takeover_uvicorn() -> None:
         if logger_name in ('uvicorn.error', 'uvicorn.access'):
             logger.addFilter(UvicornNameRewriteFilter())
 
-    # 屏蔽第三方库DEBUG噪声
-    logging.getLogger('asyncio').setLevel(logging.WARNING)
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-
 
 def _init_root_logger() -> None:
-    """初始化根日志：安装request_id工厂、设置格式、接管uvicorn"""
+    """初始化根日志：安装request_id工厂、设置格式、接管uvicorn
+
+    根日志级别设为WARNING，第三方库的DEBUG/INFO默认不输出。
+    uvicorn/fastapi已单独设为INFO，不受根日志影响。
+    """
     install_request_id_factory()
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.WARNING,
         format=NORMAL_FORMAT,
         datefmt=_DATE_FORMAT,
         force=True,
@@ -75,17 +74,21 @@ _init_root_logger()
 # -------------------------------------
 # 对外API
 # -------------------------------------
-def set_log_level(level: str | int) -> None:
-    """修改全局日志级别（包括FastAPI/Uvicorn所有日志）
+def set_log_level(level: str | int, logger_name: str | None = None) -> None:
+    """修改项目日志级别（不影响第三方库）
 
     Args:
         level: 支持传入 'debug' / 'info' / 'warn' / 'error' 或logging.DEBUG等
+        logger_name: 项目logger名称，不传则仅修改根日志级别
     """
     if isinstance(level, str):
         level = level.upper()
         level = getattr(logging, level, logging.INFO)
 
-    logging.getLogger().setLevel(level)
+    if logger_name:
+        logging.getLogger(logger_name).setLevel(level)
+    else:
+        logging.getLogger().setLevel(level)
 
 
 def set_log_format(log_format: str) -> None:
