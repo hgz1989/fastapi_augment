@@ -12,6 +12,9 @@
 - **统一响应** — 全局 `APIResponse` 格式，自动追踪 `request_id`
 - **HTTP 异常** — 完整的 4xx 异常子类，内置默认文案
 - **OpenAPI 优化** — 自动清理 422 响应、可选 Bearer 认证
+- **日志管理** — request_id 自动注入、uvicorn 接管、多进程安全轮转、一键配置
+- **健康检查** — 可扩展的检查器模式，内置应用状态与数据库连通性检查，一行开关
+- **配置管理** — 基于 pydantic-settings，支持 `.env` 文件、环境变量前缀、嵌套配置
 - **数据库迁移 CLI** — 一行命令生成/执行迁移，自动发现用户模型
 
 ## 安装
@@ -19,13 +22,14 @@
 ```bash
 pip install fastapi-augment
 
-# 推荐：安装全部可选依赖（uvicorn + sqlalchemy + orjson）
+# 推荐：安装全部可选依赖
 pip install fastapi-augment[standard]
 
 # 或按需单独安装
 pip install fastapi-augment[sqlalchemy]
 pip install fastapi-augment[uvicorn]
 pip install fastapi-augment[orjson]
+pip install fastapi-augment[config]       # pydantic-settings 配置管理
 ```
 
 **要求：** Python >= 3.11
@@ -90,6 +94,7 @@ app = create_app(
 | 路由 | 支持 `APIRouter` 列表或 `(router, kwargs)` 元组 |
 | OpenAPI | 自动清理 422 响应、可选 Bearer 认证 |
 | 数据库 | 可选挂载 `EngineManager` / `SessionFactory` 到 `app.state` |
+| 健康检查 | `health_check=True` 一键启用 `/health` 端点 |
 
 ```python
 from fastapi_augment import create_app, HookRegistry
@@ -105,6 +110,7 @@ app = create_app(
     registries=[registry],
     cors_allow_origins=['*'],
     openapi_enable_bearer_auth=True,
+    health_check=True,          # 启用健康检查
 )
 ```
 
@@ -224,6 +230,10 @@ async with sessions.read_session() as session:
     users = await user_crud.list(session, role='admin', order_by=['-created_at'], limit=10)
     total = await user_crud.count(session, is_active=True)
     has_admin = await user_crud.exists(session, role='admin')
+
+# 分页查询（返回 dict：items / page / size / total / pages）
+result = await user_crud.paginate(session, page=1, size=10, role='admin', order_by=['-created_at'])
+# result = {'items': [...], 'page': 1, 'size': 10, 'total': 100, 'pages': 10}
 
 # Update
 async with sessions.transaction() as session:
@@ -361,6 +371,7 @@ fastapi-augment-migrate upgrade --project-dir /path/to/project
 | `UpdatedByMixin` | `updated_by` |
 | `AuditMixin` | `created_by` + `updated_by` |
 | `SoftDeleteMixin` | `is_deleted` + `deleted_at` |
+| `SoftDeleteAuditMixin` | `is_deleted` + `deleted_at` + `deleted_by` |
 
 ```python
 from fastapi_augment.db.sqlalchemy import ModelBase, TimestampMixin, SoftDeleteMixin
@@ -420,7 +431,7 @@ async def list_orders(
 
 ### HTTP 异常 — `common.exceptions`
 
-完整的 4xx 异常子类，内置默认文案：
+完整的 4xx 异常子类，内置默认文案。子类只需声明 `_status_code` 类变量，无需重写 `__init__`：
 
 ```python
 from fastapi_augment.common.exceptions import (
@@ -429,6 +440,7 @@ from fastapi_augment.common.exceptions import (
     ForbiddenError,         # 403
     NotFoundError,          # 404
     ConflictError,          # 409
+    TooManyRequestsError,   # 429（支持 retry_after 参数）
     # ... 更多异常
 )
 
@@ -437,7 +449,116 @@ raise NotFoundError()
 
 # 自定义提示
 raise BadRequestError(detail='用户名不能为空')
+
+# 限流场景
+raise TooManyRequestsError(retry_after=60)
 ```
+
+### 日志管理 — `log`
+
+导入即生效：自动注入 `request_id` 到每条日志、接管 uvicorn/fastapi 日志输出。
+
+```python
+from fastapi_augment.log import setup_logger, set_log_level
+
+# 一键配置：控制台 + 按天轮转文件日志
+setup_logger(log_dir='./logs', rotation='day', backup_count=30)
+
+# 动态调整日志级别
+set_log_level('info')
+```
+
+**支持的轮转粒度：**
+
+| 粒度 | 说明 |
+|---|---|
+| `'second'` / `'minute'` / `'hour'` | 每整秒/分/点 |
+| `'day'`（默认） | 每天 00:00 |
+| `'week'` | 每周一 00:00 |
+| `'month'` | 每月 1 日 00:00 |
+| `'year'` | 每年 1 月 1 日 00:00 |
+
+**核心能力：**
+
+- **request_id 注入** — 每条日志自动携带当前请求的 `request_id`，方便链路追踪
+- **uvicorn 接管** — 统一 `uvicorn.error` / `uvicorn.access` 的日志名称为 `uvicorn`，屏蔽第三方库 DEBUG 噪声
+- **多进程安全** — 日志轮转时捕获 `PermissionError`，兼容多进程部署（如 `uvicorn --workers N`）
+- **控制台开关** — `enable_console=False` 可关闭控制台输出，仅保留文件日志
+
+### 健康检查 — `health`
+
+可扩展的检查器模式，内置应用状态与数据库连通性检查。
+
+#### 一行启用
+
+```python
+app = create_app(
+    title='My Service',
+    engine_manager=manager,
+    health_check=True,          # 自动注册 /health 端点
+)
+```
+
+`GET /health` 响应示例：
+
+```json
+{
+    "status": "healthy",
+    "checks": [
+        {"name": "app", "status": "healthy", "latencyMs": 0, "details": {"status": "running", "version": "1.0.0", "uptimeSeconds": 3600}},
+        {"name": "database", "status": "healthy", "latencyMs": 2.3}
+    ]
+}
+```
+
+- 总体状态取所有检查项中**最差**的（healthy < degraded < unhealthy）
+- 任一检查项 unhealthy 时 HTTP 返回 **503**，便于负载均衡器/探针识别
+- 传入 `engine_manager` 时自动包含数据库检查，否则仅检查应用状态
+
+#### 自定义检查器
+
+```python
+from fastapi_augment.health import BaseChecker, CheckResult, create_health_router
+
+class RedisChecker(BaseChecker):
+    @property
+    def name(self) -> str:
+        return 'redis'
+
+    async def check(self, app) -> CheckResult:
+        # 检查 Redis 连通性
+        ...
+
+# 手动注册（适合需要自定义路径或额外检查器的场景）
+app.include_router(create_health_router(
+    path='/health',
+    extra_checkers=[RedisChecker()],
+))
+```
+
+### 配置管理 — `config`
+
+基于 `pydantic-settings`，通过 `from_env()` 直接传参，无需手动导入 `SettingsConfigDict`：
+
+```python
+from fastapi_augment.config import EnvSettings
+
+class Settings(EnvSettings):
+    database_url: str
+    redis_url: str = ''
+    debug: bool = False
+    secret_key: str = 'change-me'
+
+# 直接传入 .env 路径、前缀等
+settings = Settings.from_env(
+    env_file='config/.env',
+    env_prefix='APP_',
+    env_nested_delimiter='__',
+)
+```
+
+支持 `SettingsConfigDict` 的所有参数（`env_file`、`env_prefix`、`secrets_dir`、`yaml_file` 等），
+与模型字段值自动区分，无需关心分类。
 
 ### 中间件 — `middlewares`
 
@@ -460,21 +581,32 @@ fastapi_augment/
 │   ├── exceptions.py         # 4xx HTTP 异常体系
 │   ├── exception_handlers.py # 全局异常处理器
 │   └── utils/
-│       └── strings.py        # 字符串工具
+│       └── strings.py        # 字符串工具 / JSON 序列化
+├── config/
+│   └── settings.py           # EnvSettings 配置管理
 ├── db/
 │   └── sqlalchemy/
 │       ├── engine.py         # EngineManager / NodeConfig / ClusterTopology
 │       ├── session.py        # SessionFactory（读写分离）
 │       ├── model_base.py     # ModelBase（ULID 主键）
-│       ├── crud_base.py      # CrudBase（泛型 CRUD）
+│       ├── crud_base.py      # CrudBase（泛型 CRUD + paginate）
 │       ├── migrate.py        # 数据库迁移 CLI
 │       ├── migrations/       # Alembic 迁移环境（env.py / script.py.mako）
 │       └── mixins/           # Timestamp / Audit / SoftDelete
+├── health/
+│   ├── checker.py            # BaseChecker / CheckResult / HealthResponse
+│   ├── checkers.py           # AppChecker / DatabaseChecker
+│   └── router.py             # create_health_router()
+├── log/
+│   ├── factory.py            # request_id 注入工厂
+│   ├── filters.py            # UvicornNameRewriteFilter
+│   ├── handlers.py           # 多进程安全轮转处理器
+│   └── config.py             # setup_logger / set_log_level / set_log_format
 ├── middlewares/
 │   ├── base.py               # BaseASGIMiddleware
 │   └── request_id.py         # RequestId 中间件
 ├── schemas/
-│   ├── base.py               # ORMSchemaBase / APISchemaBase
+│   ├── base.py               # SchemaBase / ORMSchemaBase
 │   ├── request.py            # PageParams / TimeRangeParams / KeywordParams
 │   ├── response.py           # APIResponse / response_success / response_fail
 │   └── pagination.py         # PageData 分页模型

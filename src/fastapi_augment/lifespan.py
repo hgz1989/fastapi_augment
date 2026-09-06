@@ -17,7 +17,7 @@ from typing import (
     overload,
     Callable,
     AsyncGenerator,
-    Sequence, cast,
+    Sequence,
 )
 
 from fastapi import FastAPI
@@ -330,10 +330,8 @@ class HookRegistry:
                 else:
                     await coro
             except asyncio.TimeoutError:
-                timeout_val = cast(int | float, timeout)
-                timeout_str = f'{timeout_val}s'
                 self._logger.error(
-                    f'[生命周期钩子执行超时] {name}: 超过 {timeout_str} s',
+                    f'[生命周期钩子执行超时] {name}: 超过 {timeout}s',
                     exc_info=False
                 )
                 if item.abort_on_exception:

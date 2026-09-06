@@ -186,14 +186,15 @@ def _resolve_alembic_config(db_url: str | None = None, project_dir: Path | None 
         Alembic 配置对象
 
     Raises:
-        SystemExit: 若根目录 alembic.ini 不存在，提示用户先执行 init
+        FileNotFoundError: 若根目录 alembic.ini 不存在，提示用户先执行 init
     """
     here = project_dir or Path.cwd()
     root_ini = here / 'alembic.ini'
 
     if not root_ini.exists():
-        _logger.error('未找到 %s，请先执行: fastapi-augment-migrate init --db-url "<数据库URL>"', root_ini)
-        sys.exit(1)
+        raise FileNotFoundError(
+            f'未找到 {root_ini}，请先执行: fastapi-augment-migrate init --db-url "<数据库URL>"'
+        )
 
     cfg = Config(str(root_ini))
     if db_url:
@@ -274,8 +275,9 @@ def generate_migration(message: str, models: str, project_dir: Path | None = Non
 
     # 检查 alembic.ini 是否存在（不自动创建，由 init 负责）
     if not alembic_ini.exists():
-        _logger.error('未找到 %s，请先执行: fastapi-augment-migrate init --db-url "<数据库URL>"', alembic_ini)
-        sys.exit(1)
+        raise FileNotFoundError(
+            f'未找到 {alembic_ini}，请先执行: fastapi-augment-migrate init --db-url "<数据库URL>"'
+        )
 
     # 确保 versions 目录存在
     versions_dir.mkdir(parents=True, exist_ok=True)
@@ -303,8 +305,7 @@ def generate_migration(message: str, models: str, project_dir: Path | None = Non
         subprocess.run(cmd, env=env, cwd=str(here), check=True)
         _logger.info('迁移脚本已生成于 %s', versions_dir)
     except subprocess.CalledProcessError as e:
-        _logger.error('生成迁移失败 (返回码 %s)', e.returncode)
-        sys.exit(1)
+        raise RuntimeError(f'生成迁移失败 (返回码 {e.returncode})') from e
 
 
 # ===================== CLI 入口 =====================
@@ -334,17 +335,21 @@ def cli_main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == 'init':
-        init_project(args.db_url, args.project_dir)
-    elif args.command == 'upgrade':
-        if args.downgrade:
-            downgrade(args.db_url, args.revision, args.project_dir)
+    try:
+        if args.command == 'init':
+            init_project(args.db_url, args.project_dir)
+        elif args.command == 'upgrade':
+            if args.downgrade:
+                downgrade(args.db_url, args.revision, args.project_dir)
+            else:
+                upgrade(args.db_url, args.revision, args.project_dir)
+        elif args.command == 'generate':
+            generate_migration(args.message, args.models, args.project_dir)
         else:
-            upgrade(args.db_url, args.revision, args.project_dir)
-    elif args.command == 'generate':
-        generate_migration(args.message, args.models, args.project_dir)
-    else:
-        parser.print_help()
+            parser.print_help()
+    except (FileNotFoundError, RuntimeError) as e:
+        _logger.error('%s', e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

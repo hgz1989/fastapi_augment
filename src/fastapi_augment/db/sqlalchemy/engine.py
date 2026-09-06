@@ -141,7 +141,7 @@ class EngineManager:
         """Create all engines based on the topology. Returns *self* for chaining.
 
         Returns:
-
+            The engine manager instance itself, for method chaining.
         """
         self._engines[self._write_key] = self._create_engine(self._topology.primary)
 
@@ -170,6 +170,8 @@ class EngineManager:
     def write_engine(self) -> AsyncEngine:
         """The primary engine used for all write operations.
 
+        Returns:
+            The primary async SQLAlchemy engine.
         """
         return self._engines[self._write_key]
 

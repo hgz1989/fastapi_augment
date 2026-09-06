@@ -45,8 +45,12 @@ orjson = [
     "orjson>=3.10.0",
 ]
 
+config = [
+    "pydantic-settings>=2.15.0",
+]
+
 standard = [
-    "fastapi-augment[uvicorn,sqlalchemy,orjson]"
+    "fastapi-augment[uvicorn,sqlalchemy,orjson,config]"
 ]
 
 # ======== 新增 CLI 入口 ========

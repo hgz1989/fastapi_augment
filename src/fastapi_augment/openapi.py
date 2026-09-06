@@ -3,10 +3,13 @@
 @CreateDate     : 2026/9/4
 @Description    : OpenAPI文档自定义配置，适配FastAPI factory工厂调用
 """
-from typing import Any, Optional
+from logging import getLogger
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
+
+_logger = getLogger(__name__)
 
 
 class OpenAPICustomConfig:
@@ -37,7 +40,7 @@ def configure_openapi_schema(
     """
     cfg = config or OpenAPICustomConfig()
 
-    def custom_openapi() -> Optional[dict[str, Any]]:
+    def custom_openapi() -> dict[str, Any] | None:
         # OpenAPI被禁用场景，直接返回None
         if app.openapi_url is None:
             return None
@@ -68,7 +71,7 @@ def configure_openapi_schema(
             openapi_schema = get_openapi(**kwargs)
         except Exception as exc:
             # 生成openapi异常，不阻断服务启动
-            print(f'[WARN] Generate openapi schema failed: {exc}')
+            _logger.warning('Generate openapi schema failed: %s', exc)
             return None
 
         components = openapi_schema.setdefault('components', {})

@@ -34,6 +34,10 @@ except ImportError:
     pass
 
 
+# orjson OPT_INDENT_2 的常量值，避免直接依赖 orjson 安装
+_ORJSON_OPT_INDENT_2 = 0x04
+
+
 # ── 字符串转换 ──
 def camel_to_snake(s: str) -> str:
     """驼峰转下划线（支持连续大写）"""
@@ -98,7 +102,7 @@ def json_dumps(obj: Any, compact: bool = True) -> str:
         try:
             opts = ORJSON_DEFAULT_OPTS
             if not compact:
-                opts |= 0x04  # OPT_INDENT_2
+                opts |= _ORJSON_OPT_INDENT_2
             return _oj_dumps(obj, option=opts).decode('utf-8')
         except (TypeError, ValueError) as e:
             raise TypeError(f'JSON 序列化失败: {e}') from e

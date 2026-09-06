@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from logging import getLogger
+from time import time
 from typing import Sequence, Callable, Any
 
 from fastapi import FastAPI, APIRouter
@@ -18,6 +19,7 @@ from .common.exception_handlers import register_exception_handlers
 from .lifespan import HookRegistry, fastapi_lifespan
 from .middlewares import RequestIdMiddleware
 from .openapi import configure_openapi_schema, OpenAPICustomConfig
+from .health import create_health_router
 
 _logger = getLogger(__name__)
 
@@ -55,6 +57,8 @@ def create_app(
         # 数据库集成（可选）
         engine_manager: Any | None = None,
         session_factory: Any | None = None,
+        # 健康检查
+        health_check: bool = False,
         # 额外 FastAPI 参数
         **kwargs: Any,
 ) -> FastAPI:
@@ -118,6 +122,8 @@ def create_app(
         register_exceptions: 是否自动注册统一异常处理器，默认 True
         engine_manager: 数据库引擎管理器实例（可选）
         session_factory: 会话工厂实例（可选）
+        health_check: 是否启用健康检查端点（默认 ``/health``）；
+            当传入 ``engine_manager`` 时自动包含数据库连通性检查
         **kwargs: 传递给 FastAPI() 构造函数的额外参数（不允许传 lifespan）
 
     Returns:
@@ -207,6 +213,11 @@ def create_app(
 
     if session_factory is not None:
         app.state.session_factory = session_factory
+
+    # ---- 10. 健康检查 ----
+    if health_check:
+        app.state.start_time = time()
+        app.include_router(create_health_router(include_db_check=engine_manager is not None))
 
     _logger.info(f'应用 [{title}] v{version} 创建完成')
     return app
