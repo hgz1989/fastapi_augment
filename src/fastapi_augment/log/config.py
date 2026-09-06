@@ -19,8 +19,8 @@ from .handlers import (
 # 日志格式
 # -------------------------------------
 NORMAL_FORMAT = (
-    '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(process)d:%(thread)-12d | '
-    '%(name)-30.30s | %(lineno)-5d | %(request_id)-32.32s | %(message)s'
+    '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(process)d:%(thread)d | '
+    '%(name)s | %(lineno)d | %(request_id)s | %(message)s'
 )
 _DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
