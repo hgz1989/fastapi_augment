@@ -51,12 +51,19 @@ def _takeover_uvicorn() -> None:
             logger.addFilter(UvicornNameRewriteFilter())
 
 
+_init_done = False
+
+
 def _init_root_logger() -> None:
     """初始化根日志：安装request_id工厂、设置格式、接管uvicorn
 
+    仅在首次调用时执行，重复导入不会重复初始化。
     根日志级别设为WARNING，第三方库的DEBUG/INFO默认不输出。
     uvicorn/fastapi已单独设为INFO，不受根日志影响。
     """
+    global _init_done
+    if _init_done:
+        return
     install_request_id_factory()
     logging.basicConfig(
         level=logging.WARNING,
@@ -65,6 +72,7 @@ def _init_root_logger() -> None:
         force=True,
     )
     _takeover_uvicorn()
+    _init_done = True
 
 
 # 包导入时自动执行一次初始化

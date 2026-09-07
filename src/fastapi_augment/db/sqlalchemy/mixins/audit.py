@@ -51,11 +51,11 @@ class AuditMixin(CreatedByMixin, UpdatedByMixin):
     两列均为可空：系统任务（无登录用户上下文）写入时留空；
     由 service 层从当前请求上下文取用户ID填充::
 
-        await crud.create(
+        await repo.create(
             session,
             User(name='alice', created_by=current_user.id),
         )
-        await crud.update_by_id(
+        await repo.update_by_id(
             session, uid, updated_by=current_user.id, **changes,
         )
     """
