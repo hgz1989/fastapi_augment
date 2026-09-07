@@ -53,6 +53,11 @@ standard = [
     "fastapi-augment[uvicorn,sqlalchemy,orjson,config]"
 ]
 
+[project.urls]
+Homepage = "https://github.com/hgz1989/fastapi_augment"
+Repository = "https://github.com/hgz1989/fastapi_augment"
+Documentation = "https://github.com/hgz1989/fastapi_augment#readme"
+
 # ======== 新增 CLI 入口 ========
 [project.scripts]
 fastapi-augment-migrate = "fastapi_augment.db.sqlalchemy.migrate:cli_main"

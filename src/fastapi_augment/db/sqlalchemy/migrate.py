@@ -10,8 +10,8 @@ from logging import getLogger
 from os import environ
 from pathlib import Path
 
-from alembic.config import Config
 from alembic import command
+from alembic.config import Config
 
 _logger = getLogger(__name__)
 
@@ -25,7 +25,7 @@ _ALEMBIC_INI_TEMPLATE = """\
 # this is typically a path given in POSIX (e.g. forward slashes)
 # format, relative to the token %(here)s which refers to the location of this
 # ini file
-script_location = fastapi_augment.db.sqlalchemy:migrations
+script_location = fastapi_augment.db.sqlalchemy:alembic
 version_locations = %(here)s/migrations/versions
 
 # template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
@@ -207,7 +207,7 @@ def _resolve_alembic_config(db_url: str | None = None, project_dir: Path | None 
 def init_project(db_url: str, project_dir: Path | None = None) -> None:
     """初始化项目迁移环境
 
-    在项目根目录生成 alembic.ini 和 migrations/versions/ 目录。
+    在项目根目录生成 alembic.ini 和 alembic/versions/ 目录。
     若 alembic.ini 已存在则跳过，不覆盖。
 
     Args:
