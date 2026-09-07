@@ -99,10 +99,12 @@ name = "fastapi-augment"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "pydantic-settings" },
 ]
 
 [package.optional-dependencies]
+config = [
+    { name = "pydantic-settings" },
+]
 orjson = [
     { name = "orjson" },
 ]
@@ -114,6 +116,7 @@ sqlalchemy = [
 standard = [
     { name = "alembic" },
     { name = "orjson" },
+    { name = "pydantic-settings" },
     { name = "python-ulid" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
@@ -134,14 +137,14 @@ dev = [
 requires-dist = [
     { name = "alembic", marker = "extra == 'sqlalchemy'", specifier = ">=1.19.2" },
     { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "fastapi-augment", extras = ["orjson", "sqlalchemy", "uvicorn"], marker = "extra == 'standard'" },
+    { name = "fastapi-augment", extras = ["config", "orjson", "sqlalchemy", "uvicorn"], marker = "extra == 'standard'" },
     { name = "orjson", marker = "extra == 'orjson'", specifier = ">=3.10.0" },
-    { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "pydantic-settings", marker = "extra == 'config'", specifier = ">=2.15.0" },
     { name = "python-ulid", marker = "extra == 'sqlalchemy'", specifier = ">=4.0.1" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sqlalchemy'", specifier = ">=2.0.52" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'uvicorn'", specifier = ">=0.24.0" },
 ]
-provides-extras = ["uvicorn", "sqlalchemy", "orjson", "standard"]
+provides-extras = ["uvicorn", "sqlalchemy", "orjson", "config", "standard"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -242,8 +245,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
