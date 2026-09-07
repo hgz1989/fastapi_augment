@@ -6,13 +6,13 @@
 
 - **应用工厂** — 一行代码创建 FastAPI 实例，自动装配中间件、路由、生命周期与数据库
 - **生命周期管理** — 多注册表、优先级、超时控制、异常策略的启动/关闭钩子
-- **读写分离** — 单库 / 主从 / 集群拓扑的异步引擎管理，Session 自动路由
-- **泛型 CRUD** — 类型安全的异步 CRUD 仓库，支持关键字过滤与原生表达式
+- **读写分离** — 单库 / 主从 / 集群拓扑的异步引擎管理，线程安全的 Session 自动路由
+- **泛型仓储** — 类型安全的异步 Repository，支持直接实例化与子类继承两种方式
 - **可组合 Mixin** — 时间戳、审计、软删除等列混入，自由组合
 - **统一响应** — 全局 `APIResponse` 格式，自动追踪 `request_id`
 - **HTTP 异常** — 完整的 4xx 异常子类，内置默认文案
 - **OpenAPI 优化** — 自动清理 422 响应、可选 Bearer 认证
-- **日志管理** — request_id 自动注入、uvicorn 接管、多进程安全轮转、一键配置
+- **日志管理** — request_id 自动注入、uvicorn 接管、多进程安全轮转、幂等初始化、一键配置
 - **健康检查** — 可扩展的检查器模式，内置应用状态与数据库连通性检查，一行开关
 - **配置管理** — 基于 pydantic-settings，支持 `.env` 文件、环境变量前缀、嵌套配置
 - **数据库迁移 CLI** — 一行命令生成/执行迁移，自动发现用户模型
@@ -41,8 +41,9 @@ from fastapi import APIRouter
 from fastapi_augment import create_app
 from fastapi_augment.db.sqlalchemy import (
     ClusterTopology, NodeConfig, EngineManager, SessionFactory,
-    ModelBase, CrudBase, TimestampMixin,
+    ModelBase, RepositoryBase,
 )
+from fastapi_augment.db.sqlalchemy.mixins import TimestampMixin
 from fastapi_augment.schemas import response_success
 
 # ── 1. 数据库拓扑 ──────────────────────────────────────
@@ -61,13 +62,13 @@ class User(TimestampMixin, ModelBase):
 
 # ── 3. 路由 ────────────────────────────────────────────
 router = APIRouter()
-user_crud = CrudBase(User)
+user_repo = RepositoryBase(User)
 
 
 @router.get('/users')
 async def list_users():
     async with sessions.read_session() as session:
-        users = await user_crud.list(session, is_active=True, limit=10)
+        users = await user_repo.list(session, is_active=True, limit=10)
         return response_success(data=users)
 
 
@@ -87,14 +88,14 @@ app = create_app(
 
 统一创建 FastAPI 实例，自动装配以下组件：
 
-| 组件 | 说明 |
-|---|---|
-| 生命周期 | 接入 `fastapi_lifespan`，合并用户注册表与 `core_registry` |
-| 中间件 | 自动添加 `RequestIdMiddleware`，可选 CORS |
-| 路由 | 支持 `APIRouter` 列表或 `(router, kwargs)` 元组 |
-| OpenAPI | 自动清理 422 响应、可选 Bearer 认证 |
-| 数据库 | 可选挂载 `EngineManager` / `SessionFactory` 到 `app.state` |
-| 健康检查 | `health_check=True` 一键启用 `/health` 端点 |
+| 组件     | 说明                                                       |
+| -------- | ---------------------------------------------------------- |
+| 生命周期 | 接入 `fastapi_lifespan`，合并用户注册表与 `core_registry`  |
+| 中间件   | 自动添加 `RequestIdMiddleware`，可选 CORS                  |
+| 路由     | 支持 `APIRouter` 列表或 `(router, kwargs)` 元组            |
+| OpenAPI  | 自动清理 422 响应、可选 Bearer 认证                        |
+| 数据库   | 可选挂载 `EngineManager` / `SessionFactory` 到 `app.state` |
+| 健康检查 | `health_check=True` 一键启用 `/health` 端点                |
 
 ```python
 from fastapi_augment import create_app, HookRegistry
@@ -107,7 +108,7 @@ async def init_cache() -> None:
 
 app = create_app(
     title='My Service',
-    registries=[registry],
+    registries=registry,             # 单个或列表均可
     cors_allow_origins=['*'],
     openapi_enable_bearer_auth=True,
     health_check=True,          # 启用健康检查
@@ -166,7 +167,7 @@ topology = ClusterTopology(
 )
 
 manager = EngineManager(topology).start()
-# 读引擎轮询（round-robin）
+# 读引擎轮询（round-robin），线程安全
 read_engine = manager.next_read_engine()
 ```
 
@@ -197,6 +198,8 @@ async def list_users(session: AsyncSession = Depends(sessions.depends_read)):
     ...
 ```
 
+> **缓存说明：** `read_session()` 按 `AsyncEngine` 缓存 `async_sessionmaker`，线程安全，避免重复创建。打印 `SessionFactory` 实例可查看已缓存的引擎信息。
+
 #### 模型基类 — `ModelBase`
 
 基于 ULID 主键的声明式模型基类：
@@ -209,61 +212,74 @@ class User(TimestampMixin, ModelBase):
     name: str
 ```
 
-#### 泛型 CRUD — `CrudBase`
+#### 泛型仓储 — `RepositoryBase`
 
-类型安全的异步 CRUD 仓库，CRUD 方法只 **flush**，不 commit，事务边界由调用方控制：
+类型安全的异步仓储基类，Repository 方法只 **flush**，不 commit，事务边界由调用方控制。
+支持两种使用方式：
 
 ```python
-from fastapi_augment.db.sqlalchemy import CrudBase
+from fastapi_augment.db.sqlalchemy import RepositoryBase
 
-user_crud = CrudBase(User)
+# 方式 1：直接实例化 — 显式传入模型类
+user_repo = RepositoryBase(User)
 
+# 方式 2：子类继承 — 通过泛型参数绑定模型，可扩展自定义方法
+class UserRepo(RepositoryBase[User]):
+    async def find_by_email(self, session, email: str) -> User | None:
+        return await self.get_one(session, email=email)
+
+user_repo = UserRepo()  # 无需再传 User
+```
+
+**CRUD 操作：**
+
+```python
 # Create（静态方法）
 async with sessions.transaction() as session:
-    await user_crud.create(session, User(name='alice'))
-    await user_crud.create_many(session, [User(name='bob'), User(name='carol')])
+    await user_repo.create(session, User(name='alice'))
+    await user_repo.create_many(session, [User(name='bob'), User(name='carol')])
 
 # Read（实例方法）
 async with sessions.read_session() as session:
-    user = await user_crud.get(session, id_='01HXK...')
-    user = await user_crud.get_one(session, name='alice')
-    users = await user_crud.list(session, role='admin', order_by=['-created_at'], limit=10)
-    total = await user_crud.count(session, is_active=True)
-    has_admin = await user_crud.exists(session, role='admin')
+    user = await user_repo.get(session, id_='01HXK...')
+    user = await user_repo.get_one(session, name='alice')
+    users = await user_repo.list(session, role='admin', order_by=['-created_at'], limit=10)
+    total = await user_repo.count(session, is_active=True)
+    has_admin = await user_repo.exists(session, role='admin')
 
 # 分页查询（返回 dict：items / page / size / total / pages）
-result = await user_crud.paginate(session, page=1, size=10, role='admin', order_by=['-created_at'])
+result = await user_repo.paginate(session, page=1, size=10, role='admin', order_by=['-created_at'])
 # result = {'items': [...], 'page': 1, 'size': 10, 'total': 100, 'pages': 10}
 
 # Update
 async with sessions.transaction() as session:
-    await user_crud.update(session, user, name='new_name')
-    affected = await user_crud.update_by_id(session, id_='01HXK...', name='new_name')
+    await user_repo.update(session, user, name='new_name')
+    affected = await user_repo.update_by_id(session, id_='01HXK...', name='new_name')
 
 # Delete
 async with sessions.transaction() as session:
-    await user_crud.delete(session, user)
-    deleted = await user_crud.delete_by_id(session, id_='01HXK...')
-    count = await user_crud.delete_where(session, is_active=False)
+    await user_repo.delete(session, user)
+    deleted = await user_repo.delete_by_id(session, id_='01HXK...')
+    count = await user_repo.delete_where(session, is_active=False)
 ```
 
 **过滤语法：**
 
 ```python
 # 关键字过滤 — 等值匹配
-await user_crud.list(session, name='alice')
+await user_repo.list(session, name='alice')
 
 # 序列 — 自动转为 IN 查询
-await user_crud.list(session, id_=['01HXK...', '01HXL...'])
+await user_repo.list(session, id_=['01HXK...', '01HXL...'])
 
 # None — 自动转为 IS NULL
-await user_crud.list(session, deleted_at=None)
+await user_repo.list(session, deleted_at=None)
 
 # 原生 SQLAlchemy 表达式
-await user_crud.list(session, expressions=(User.age > 18,))
+await user_repo.list(session, expressions=(User.age > 18,))
 
 # 排序：字段名前缀 - 表示降序
-await user_crud.list(session, order_by=['-created_at', 'name'])
+await user_repo.list(session, order_by=['-created_at', 'name'])
 ```
 
 ### 数据库迁移 CLI — `fastapi-augment-migrate`
@@ -347,34 +363,35 @@ fastapi-augment-migrate upgrade --project-dir /path/to/project
 
 #### CLI 参数一览
 
-| 子命令 | 参数 | 说明 |
-|---|---|---|
-| `init` | `--db-url` | 数据库 URL（默认 `sqlite:///app.db`） |
-| | `--project-dir` | 项目根目录（默认当前目录） |
-| `generate` | `--message` | **必填**，迁移描述 |
-| | `--models` | **必填**，模型模块路径，逗号分隔 |
-| | `--project-dir` | 项目根目录（默认当前目录） |
-| `upgrade` | `--db-url` | 数据库 URL（不传则从 alembic.ini 读取） |
-| | `--revision` | 目标版本（默认 `head`） |
-| | `--downgrade` | 降级模式 |
-| | `--project-dir` | 项目根目录（默认当前目录） |
+| 子命令     | 参数            | 说明                                    |
+| ---------- | --------------- | --------------------------------------- |
+| `init`     | `--db-url`      | 数据库 URL（默认 `sqlite:///app.db`）   |
+|            | `--project-dir` | 项目根目录（默认当前目录）              |
+| `generate` | `--message`     | **必填**，迁移描述                      |
+|            | `--models`      | **必填**，模型模块路径，逗号分隔        |
+|            | `--project-dir` | 项目根目录（默认当前目录）              |
+| `upgrade`  | `--db-url`      | 数据库 URL（不传则从 alembic.ini 读取） |
+|            | `--revision`    | 目标版本（默认 `head`）                 |
+|            | `--downgrade`   | 降级模式                                |
+|            | `--project-dir` | 项目根目录（默认当前目录）              |
 
 ### 模型 Mixin — `db.sqlalchemy.mixins`
 
 可组合的列混入，按需叠加：
 
-| Mixin | 提供的列 |
-|---|---|
-| `CreatedAtMixin` | `created_at` |
-| `TimestampMixin` | `created_at` + `updated_at` |
-| `CreatedByMixin` | `created_by` |
-| `UpdatedByMixin` | `updated_by` |
-| `AuditMixin` | `created_by` + `updated_by` |
-| `SoftDeleteMixin` | `is_deleted` + `deleted_at` |
+| Mixin                  | 提供的列                                   |
+| ---------------------- | ------------------------------------------ |
+| `CreatedAtMixin`       | `created_at`                               |
+| `TimestampMixin`       | `created_at` + `updated_at`                |
+| `CreatedByMixin`       | `created_by`                               |
+| `UpdatedByMixin`       | `updated_by`                               |
+| `AuditMixin`           | `created_by` + `updated_by`                |
+| `SoftDeleteMixin`      | `is_deleted` + `deleted_at`                |
 | `SoftDeleteAuditMixin` | `is_deleted` + `deleted_at` + `deleted_by` |
 
 ```python
-from fastapi_augment.db.sqlalchemy import ModelBase, TimestampMixin, SoftDeleteMixin
+from fastapi_augment.db.sqlalchemy import ModelBase
+from fastapi_augment.db.sqlalchemy.mixins import TimestampMixin, SoftDeleteMixin
 
 class User(TimestampMixin, SoftDeleteMixin, ModelBase):
     __tablename__ = 'users'
@@ -470,19 +487,20 @@ set_log_level('info')
 
 **支持的轮转粒度：**
 
-| 粒度 | 说明 |
-|---|---|
-| `'second'` / `'minute'` / `'hour'` | 每整秒/分/点 |
-| `'day'`（默认） | 每天 00:00 |
-| `'week'` | 每周一 00:00 |
-| `'month'` | 每月 1 日 00:00 |
-| `'year'` | 每年 1 月 1 日 00:00 |
+| 粒度                               | 说明                 |
+| ---------------------------------- | -------------------- |
+| `'second'` / `'minute'` / `'hour'` | 每整秒/分/点         |
+| `'day'`（默认）                    | 每天 00:00           |
+| `'week'`                           | 每周一 00:00         |
+| `'month'`                          | 每月 1 日 00:00      |
+| `'year'`                           | 每年 1 月 1 日 00:00 |
 
 **核心能力：**
 
 - **request_id 注入** — 每条日志自动携带当前请求的 `request_id`，方便链路追踪
 - **uvicorn 接管** — 统一 `uvicorn.error` / `uvicorn.access` 的日志名称为 `uvicorn`，屏蔽第三方库 DEBUG 噪声
-- **多进程安全** — 日志轮转时捕获 `PermissionError`，兼容多进程部署（如 `uvicorn --workers N`）
+- **多进程安全** — 日志轮转时捕获 `OSError`（含 `PermissionError`、`FileNotFoundError`），兼容多进程部署（如 `uvicorn --workers N`）
+- **幂等初始化** — 重复导入或多次调用 `setup_logger()` 不会叠加处理器或工厂链
 - **控制台开关** — `enable_console=False` 可关闭控制台输出，仅保留文件日志
 
 ### 健康检查 — `health`
@@ -503,11 +521,20 @@ app = create_app(
 
 ```json
 {
-    "status": "healthy",
-    "checks": [
-        {"name": "app", "status": "healthy", "latencyMs": 0, "details": {"status": "running", "version": "1.0.0", "uptimeSeconds": 3600}},
-        {"name": "database", "status": "healthy", "latencyMs": 2.3}
-    ]
+  "status": "healthy",
+  "checks": [
+    {
+      "name": "app",
+      "status": "healthy",
+      "latencyMs": 0,
+      "details": {
+        "status": "running",
+        "version": "1.0.0",
+        "uptimeSeconds": 3600
+      }
+    },
+    { "name": "database", "status": "healthy", "latencyMs": 2.3 }
+  ]
 }
 ```
 
@@ -589,7 +616,7 @@ fastapi_augment/
 │       ├── engine.py         # EngineManager / NodeConfig / ClusterTopology
 │       ├── session.py        # SessionFactory（读写分离）
 │       ├── model_base.py     # ModelBase（ULID 主键）
-│       ├── crud_base.py      # CrudBase（泛型 CRUD + paginate）
+│       ├── repository_base.py # RepositoryBase（泛型仓储 + paginate）
 │       ├── migrate.py        # 数据库迁移 CLI
 │       ├── migrations/       # Alembic 迁移环境（env.py / script.py.mako）
 │       └── mixins/           # Timestamp / Audit / SoftDelete

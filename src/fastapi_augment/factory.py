@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from time import time
-from typing import Sequence, Callable, Any
+from typing import TYPE_CHECKING, Sequence, Callable, Any
 
 from fastapi import FastAPI, APIRouter
 from starlette.middleware import Middleware
@@ -19,6 +19,9 @@ from .lifespan import HookRegistry, fastapi_lifespan
 from .middlewares import RequestIdMiddleware
 from .openapi import configure_openapi_schema, OpenAPICustomConfig
 from .health import create_health_router
+
+if TYPE_CHECKING:
+    from .db.sqlalchemy import EngineManager, SessionFactory
 
 # -------------------------- 类型别名 --------------------------
 # 路由注册回调：接收 app 实例，负责 include_router 等操作
@@ -52,8 +55,8 @@ def create_app(
         # 异常处理器
         register_exceptions: bool = True,
         # 数据库集成（可选）
-        engine_manager: Any | None = None,
-        session_factory: Any | None = None,
+        engine_manager: EngineManager | None = None,
+        session_factory: SessionFactory | None = None,
         # 健康检查
         health_check: bool = False,
         # 额外 FastAPI 参数
@@ -222,17 +225,21 @@ def create_app(
 # -------------------------- 内部辅助 --------------------------
 
 def _resolve_registries(
-        registries: Sequence[HookRegistry] | None,
+        registries: Sequence[HookRegistry] | HookRegistry | None,
 ) -> list[HookRegistry]:
     """将 registries 参数规范化为列表。
 
     Args:
-        registries: 用户传入的注册表参数
+        registries: 用户传入的注册表参数，可以是单个 HookRegistry、
+            HookRegistry 序列或 None。
 
     Returns:
         规范化后的 HookRegistry 列表
     """
     if registries is None:
         return []
+
+    if isinstance(registries, HookRegistry):
+        return [registries]
 
     return list(registries)

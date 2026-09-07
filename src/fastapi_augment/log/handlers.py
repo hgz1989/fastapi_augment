@@ -3,23 +3,35 @@
 @CreateDate : 2026/9/6
 @Description: 多进程安全的日志轮转处理器，支持秒/分/时/天/周及自定义月/年轮转
 """
+import logging
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 
 
+_logger = logging.getLogger(__name__)
+
+
 class MultiProcessTimedRotatingFileHandler(TimedRotatingFileHandler):
-    """支持多进程安全的按时间轮转处理器"""
+    """支持多进程安全的按时间轮转处理器
+
+    多进程场景下，多个 worker 可能同时触发轮转。
+    通过捕获 ``OSError``（含 ``PermissionError``、``FileNotFoundError``）
+    来兼容其他进程已完成轮转或删除了旧文件的情况。
+    """
 
     def doRollover(self) -> None:
-        """执行轮转，捕获PermissionError以兼容多进程场景"""
+        """执行轮转，捕获多进程竞争引发的文件系统异常"""
         try:
             super().doRollover()
-        except PermissionError:
-            # 没抢到锁，说明其他进程正在轮转，重新打开新的文件流即可
+        except OSError:
+            # 其他进程已完成轮转或文件已被移动/删除，重新打开新文件流
             if self.stream:
                 self.stream.close()
                 self.stream = None
-            self.stream = self._open()
+            try:
+                self.stream = self._open()
+            except OSError as exc:
+                _logger.warning('Failed to reopen log file after rollover: %s', exc)
 
 
 class MonthlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):

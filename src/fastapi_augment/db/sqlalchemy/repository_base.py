@@ -1,13 +1,13 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/8/31
-@Description    : Generic async CRUD base with create / read / update / delete operations.
+@Description    : Generic async repository base with create / read / update / delete operations.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import typing
 from math import ceil
-from typing import Any, Generic, TypeVar, cast
+from typing import TypeVar, Generic, Sequence, Any, cast, Mapping
 
 from sqlalchemy import ColumnElement, delete, exists, func, select, update
 from sqlalchemy.engine import CursorResult
@@ -19,34 +19,67 @@ from .model_base import ModelBase
 ModelT = TypeVar('ModelT', bound=ModelBase)
 
 
-class CrudBase(Generic[ModelT]):
-    """Generic CRUD repository for :class:`ModelBase` subclasses.
+class RepositoryBase(Generic[ModelT]):
+    """Generic repository for :class:`ModelBase` subclasses.
+
+    Two usage styles are supported:
+
+    **1. Direct instantiation** — pass the model class explicitly::
+
+        user_repo = RepositoryBase(User)
+
+    **2. Subclass** — bind the model via the generic parameter::
+
+        class UserRepo(RepositoryBase[User]):
+            ...
+
+        user_repo = UserRepo()
 
     The session is always passed explicitly, so callers keep full control
-    of the transaction boundary — CRUD methods only *flush*, never *commit*::
-
-        user_crud = CrudBase(User)
+    of the transaction boundary — repository methods only *flush*, never *commit*::
 
         async with factory.transaction() as session:      # auto commit
-            await user_crud.create(session, User(name="alice"))
+            await user_repo.create(session, User(name="alice"))
 
         async with factory.read_session() as session:     # read replica
-            users = await user_crud.list(session, is_active=True, limit=10)
+            users = await user_repo.list(session, is_active=True, limit=10)
 
     Filters accept both keyword arguments and raw SQLAlchemy expressions::
 
-        await user_crud.list(session, role="admin", expressions=(User.age > 18,))
-        await user_crud.list(session, id=["01A", "02B"])   # sequence -> IN
-        await user_crud.list(session, name=None)           # None -> IS NULL
+        await user_repo.list(session, role="admin", expressions=(User.age > 18,))
+        await user_repo.list(session, id=["01A", "02B"])   # sequence -> IN
+        await user_repo.list(session, name=None)           # None -> IS NULL
     """
 
-    def __init__(self, model: type[ModelT]):
-        """Initialize the CRUD repository.
+    def __init__(self, model: type[ModelT] | None = None):
+        """Initialize the repository.
 
         Args:
             model: The SQLAlchemy model class to operate on.
+                If *None*, the model is inferred from the generic
+                parameter of a subclass (e.g. ``class UserRepo(RepositoryBase[User])``).
         """
+        if model is None:
+            model = self._resolve_generic_model()
         self.model = model
+
+    def _resolve_generic_model(self) -> type[ModelT]:
+        """Walk ``__orig_bases__`` to find the concrete model type bound via ``Generic``.
+
+        Returns:
+            The resolved model class.
+
+        Raises:
+            TypeError: If no model type can be inferred.
+        """
+        for base in type(self).__orig_bases__:
+            args = typing.get_args(base)
+            if args and isinstance(args[0], type) and issubclass(args[0], ModelBase):
+                return cast(type[ModelT], args[0])
+        raise TypeError(
+            f'{type(self).__name__} must either pass a model class or '
+            f'declare it as a generic parameter (e.g. RepositoryBase[User]).'
+        )
 
     # ── Read ─────────────────────────────────────────────────────────────
 
@@ -159,7 +192,7 @@ class CrudBase(Generic[ModelT]):
         内部复用 ``_conditions`` 保证 count 与 list 使用完全相同的过滤条件，
         避免调用方手动写两遍 filter::
 
-            result = await crud.paginate(
+            result = await repo.paginate(
                 session, page=1, size=10,
                 is_active=True, order_by=['-created_at'],
             )

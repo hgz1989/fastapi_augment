@@ -28,5 +28,12 @@ def _record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
 
 
 def install_request_id_factory() -> None:
-    """安装自定义日志记录工厂，使所有日志自动携带request_id"""
+    """安装自定义日志记录工厂，使所有日志自动携带request_id。
+
+    幂等操作：重复调用不会叠加包装层。
+    """
+    if logging.getLogRecordFactory() is _record_factory:
+        return
+    global _old_factory
+    _old_factory = logging.getLogRecordFactory()
     logging.setLogRecordFactory(_record_factory)

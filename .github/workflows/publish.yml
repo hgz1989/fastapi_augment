@@ -4,22 +4,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e '.[standard]' && pip install pytest pytest-asyncio aiosqlite httpx
+
+      - name: Run tests
+        run: pytest -q
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
 
     steps:
-      # 升级 checkout 到 v5 适配 Node24
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      # 升级 setup-python 到 v6
       - name: Setup Python 3.11
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
           cache: pip
 
       - run: pip install --upgrade pip build

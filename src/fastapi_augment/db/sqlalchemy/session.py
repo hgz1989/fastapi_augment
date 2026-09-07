@@ -5,13 +5,15 @@
 """
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+import threading
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, AsyncGenerator
+from weakref import WeakKeyDictionary
 
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
-    async_sessionmaker,
+    async_sessionmaker
 )
 
 from .engine import EngineManager
@@ -39,15 +41,15 @@ class SessionFactory:
         # FastAPI dependencies
         @app.get('/users')
         async def list_users(session: AsyncSession = Depends(factory.depends_read)):
-            ...
+            pass
     """
 
     def __init__(
-        self,
-        engine_manager: EngineManager,
-        *,
-        expire_on_commit: bool = False,
-        session_kwargs: dict[str, Any] | None = None,
+            self,
+            engine_manager: EngineManager,
+            *,
+            expire_on_commit: bool = False,
+            session_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._manager = engine_manager
         self._session_kwargs = session_kwargs or {}
@@ -61,7 +63,8 @@ class SessionFactory:
         )
 
         # 缓存读引擎对应的 session factory，避免每次 read_session 重复创建
-        self._read_factories: dict[str, async_sessionmaker[AsyncSession]] = {}
+        self._read_factories: WeakKeyDictionary[AsyncEngine, async_sessionmaker[AsyncSession]] = WeakKeyDictionary()
+        self._lock = threading.Lock()
 
     # ── Properties ───────────────────────────────────────────────────────
 
@@ -91,21 +94,24 @@ class SessionFactory:
     async def read_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Yield a session bound to a **read** engine (round-robin across replicas).
 
+        Per-engine ``async_sessionmaker`` instances are cached to avoid
+        redundant factory creation.  The cache is thread-safe.
+
         Returns:
             An async session bound to a read engine.
         """
         read_engine = self._manager.next_read_engine()
-        engine_key = id(read_engine)
 
-        factory = self._read_factories.get(engine_key)
-        if factory is None:
-            factory = async_sessionmaker(
-                bind=read_engine,
-                class_=AsyncSession,
-                expire_on_commit=self._expire_on_commit,
-                **self._session_kwargs,
-            )
-            self._read_factories[engine_key] = factory
+        with self._lock:
+            factory = self._read_factories.get(read_engine)
+            if factory is None:
+                factory = async_sessionmaker(
+                    bind=read_engine,
+                    class_=AsyncSession,
+                    expire_on_commit=self._expire_on_commit,
+                    **self._session_kwargs,
+                )
+                self._read_factories[read_engine] = factory
 
         async with factory() as session:
             yield session
@@ -158,3 +164,10 @@ class SessionFactory:
     async def dispose(self) -> None:
         """Dispose the underlying engine manager and all connection pools."""
         await self._manager.dispose()
+
+    def __repr__(self) -> str:
+        engines = list(self._read_factories.keys())
+        return (
+            f'SessionFactory(write_engine={self._manager.write_engine.url!s}, '
+            f'read_engines={[str(e.url) for e in engines]})'
+        )

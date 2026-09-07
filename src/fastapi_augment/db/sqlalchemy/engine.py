@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from itertools import cycle
 from typing import Any
@@ -134,6 +135,7 @@ class EngineManager:
         self._write_key: str = 'primary'
         self._read_keys: list[str] = []
         self._read_cycle: cycle[str] | None = None
+        self._lock = threading.Lock()
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -158,11 +160,13 @@ class EngineManager:
 
     async def dispose(self) -> None:
         """Dispose all engine connection pools gracefully."""
-        for engine in self._engines.values():
+        with self._lock:
+            engines = list(self._engines.values())
+            self._engines.clear()
+            self._read_keys.clear()
+            self._read_cycle = None
+        for engine in engines:
             await engine.dispose()
-        self._engines.clear()
-        self._read_keys.clear()
-        self._read_cycle = None
 
     # ── Engine Access ────────────────────────────────────────────────────
 
@@ -178,11 +182,14 @@ class EngineManager:
     def next_read_engine(self) -> AsyncEngine:
         """Return the next read engine via round-robin; falls back to the write engine.
 
+        Thread-safe: the round-robin iterator is protected by a lock.
+
         Returns:
             An async SQLAlchemy engine.
         """
-        if self._read_cycle is not None:
-            return self._engines[next(self._read_cycle)]
+        with self._lock:
+            if self._read_cycle is not None:
+                return self._engines[next(self._read_cycle)]
         return self.write_engine
 
     def get_engine(self, name: str) -> AsyncEngine:

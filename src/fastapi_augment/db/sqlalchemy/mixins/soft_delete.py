@@ -14,17 +14,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 class SoftDeleteMixin:
     """软删除混入类
 
-    为模型添加 is_deleted / deleted_at 两列，配合 CrudBase 使用::
+    为模型添加 is_deleted / deleted_at 两列，配合 RepositoryBase 使用::
 
         # 标记删除（service 层负责）
-        await crud.update_by_id(
+        await repo.update_by_id(
             session, uid,
             is_deleted=True,
             deleted_at=datetime.now(timezone.utc),
         )
 
         # 只查询未删除数据
-        await crud.list(session, expressions=(User.not_deleted(),))
+        await repo.list(session, expressions=(User.not_deleted(),))
 
     注意：软删除只是应用层约定，数据库的唯一约束、外键等
     不会感知软删状态（软删行仍占用唯一键），需在业务层处理。
@@ -62,7 +62,7 @@ class SoftDeleteAuditMixin(SoftDeleteMixin):
     需要审计删除人的模型再继承本类，不要全局滥用。
 
     使用示例::
-        await crud.update_by_id(
+        await repo.update_by_id(
             session,
             uid,
             is_deleted=True,
