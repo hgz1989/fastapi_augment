@@ -77,9 +77,9 @@ include = ["fastapi_augment*"]
 [tool.setuptools.package-data]
 fastapi_augment = [
     "py.typed",
-    "db/sqlalchemy/migrations/*.py",
-    "db/sqlalchemy/migrations/*.mako",
-    "db/sqlalchemy/migrations/README",
+    "db/sqlalchemy/alembic/*.py",
+    "db/sqlalchemy/alembic/*.mako",
+    "db/sqlalchemy/alembic/README",
 ]
 
 [tool.setuptools.dynamic]
