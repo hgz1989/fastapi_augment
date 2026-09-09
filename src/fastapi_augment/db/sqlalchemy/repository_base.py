@@ -50,6 +50,7 @@ class RepositoryBase(Generic[ModelT]):
         await user_repo.list(session, id=["01A", "02B"])   # sequence -> IN
         await user_repo.list(session, name=None)           # None -> IS NULL
     """
+    model: type[ModelT]  # The SQLAlchemy model class to operate on.
 
     def __init__(self, model: type[ModelT] | None = None):
         """Initialize the repository.
@@ -61,6 +62,7 @@ class RepositoryBase(Generic[ModelT]):
         """
         if model is None:
             model = self._resolve_generic_model()
+
         self.model = model
 
     def _resolve_generic_model(self) -> type[ModelT]:
@@ -72,6 +74,7 @@ class RepositoryBase(Generic[ModelT]):
         Raises:
             TypeError: If no model type can be inferred.
         """
+        # noinspection PyUnresolvedReferences
         for base in type(self).__orig_bases__:
             args = typing.get_args(base)
             if args and isinstance(args[0], type) and issubclass(args[0], ModelBase):
