@@ -31,8 +31,9 @@ _RouteRegistrar = Callable[[FastAPI], None]
 def create_app(
         *,
         title: str = 'FastAPI',
-        version: str = '0.1.0',
+        summary: str = '',
         description: str = '',
+        version: str = '0.1.0',
         debug: bool = False,
         docs_url: str | None = '/docs',
         redoc_url: str | None = '/redoc',
@@ -103,8 +104,9 @@ def create_app(
 
     Args:
         title: 应用标题
-        version: 应用版本
+        summary: 应用摘要
         description: 应用描述
+        version: 应用版本
         debug: 是否开启调试模式
         docs_url: Swagger UI 路径，None 禁用
         redoc_url: ReDoc 路径，None 禁用
@@ -141,10 +143,11 @@ def create_app(
 
     # ---- 1. 构建 FastAPI 实例 ----
     app = FastAPI(
-        title=title,
-        version=version,
-        description=description,
         debug=debug,
+        title=title,
+        summary=summary,
+        description=description,
+        version=version,
         docs_url=docs_url,
         redoc_url=redoc_url,
         openapi_url=openapi_url,
