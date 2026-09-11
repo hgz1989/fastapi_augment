@@ -52,7 +52,6 @@ def create_app(
         # OpenAPI 自定义参数新增
         openapi_remove_422: bool = True,
         openapi_remove_validation_error: bool = True,
-        openapi_enable_bearer_auth: bool = False,
         # 异常处理器
         register_exceptions: bool = True,
         # 数据库集成（可选）
@@ -120,7 +119,6 @@ def create_app(
         route_registrars: 路由注册回调列表，接收 app 参数
         openapi_remove_422: 是否移除 422 验证错误响应
         openapi_remove_validation_error: 是否移除验证错误参数
-        openapi_enable_bearer_auth: 是否启用 Bearer 认证
         register_exceptions: 是否自动注册统一异常处理器，默认 True
         engine_manager: 数据库引擎管理器实例（可选）
         session_factory: 会话工厂实例（可选）
@@ -202,7 +200,6 @@ def create_app(
         config=OpenAPICustomConfig(
             remove_422=openapi_remove_422,
             remove_validation_error_schema=openapi_remove_validation_error,
-            enable_bearer_auth=openapi_enable_bearer_auth
         )
     )
 

@@ -19,13 +19,9 @@ class OpenAPICustomConfig:
             self,
             remove_422: bool = True,
             remove_validation_error_schema: bool = True,
-            enable_bearer_auth: bool = False,
-            bearer_auth_name: str = 'BearerAuth'
     ):
         self.remove_422 = remove_422
         self.remove_validation_error_schema = remove_validation_error_schema
-        self.enable_bearer_auth = enable_bearer_auth
-        self.bearer_auth_name = bearer_auth_name
 
 
 def configure_openapi_schema(
@@ -93,15 +89,6 @@ def configure_openapi_schema(
                         continue
                     responses = method_obj.get('responses', {})
                     responses.pop('422', None)
-
-        # 开启Bearer鉴权文档
-        if cfg.enable_bearer_auth:
-            security_schemes = components.setdefault('securitySchemes', {})
-            security_schemes[cfg.bearer_auth_name] = {
-                'type': 'http',
-                'scheme': 'bearer'
-            }
-            openapi_schema.setdefault('security', [{cfg.bearer_auth_name: []}])
 
         app.openapi_schema = openapi_schema
         return app.openapi_schema

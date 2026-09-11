@@ -103,13 +103,30 @@ class TestRepositoryRead:
         await RepositoryBase.create(session, UserItem(name='alice', role='admin'))
         await RepositoryBase.create(session, UserItem(name='bob', role='user'))
 
-        result = await repo.get_one(session, name='bob')
+        result = await repo.get_first(session, name='bob')
         assert result is not None
         assert result.name == 'bob'
 
     async def test_get_one_no_match(self, session: AsyncSession, repo: RepositoryBase):
-        result = await repo.get_one(session, name='nobody')
+        result = await repo.get_first(session, name='nobody')
         assert result is None
+
+    async def test_get_unique_found(self, session: AsyncSession, repo: RepositoryBase):
+        await RepositoryBase.create(session, UserItem(name='alice', role='admin'))
+        result = await repo.get_unique(session, name='alice')
+        assert result is not None
+        assert result.name == 'alice'
+
+    async def test_get_unique_no_match(self, session: AsyncSession, repo: RepositoryBase):
+        result = await repo.get_unique(session, name='nobody')
+        assert result is None
+
+    async def test_get_unique_multiple_raises(self, session: AsyncSession, repo: RepositoryBase):
+        await RepositoryBase.create(session, UserItem(name='alice', role='user'))
+        await RepositoryBase.create(session, UserItem(name='alice', role='admin'))
+        from sqlalchemy.exc import MultipleResultsFound
+        with pytest.raises(MultipleResultsFound):
+            await repo.get_unique(session, name='alice')
 
     async def test_list_all(self, session: AsyncSession, repo: RepositoryBase):
         await RepositoryBase.create(session, UserItem(name='a'))

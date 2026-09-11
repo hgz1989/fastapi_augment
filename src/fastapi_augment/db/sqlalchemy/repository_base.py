@@ -100,7 +100,32 @@ class RepositoryBase(Generic[ModelT]):
         """
         return await session.get(self.model, id_)
 
-    async def get_one(
+    async def get_unique(
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
+    ) -> ModelT | None:
+        """Fetch exactly zero or one row matching filters.
+        If more than one row matches, raises MultipleResultsFound.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            Matching instance if exactly one found, None if no match.
+
+        Raises:
+            MultipleResultsFound: More than one row satisfies the filter.
+        """
+        stmt = select(self.model).where(*self._conditions(expressions, filters))
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_first(
             self,
             session: AsyncSession,
             *,
