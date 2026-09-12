@@ -28,20 +28,14 @@ class TestOpenAPICustomConfig:
         cfg = OpenAPICustomConfig()
         assert cfg.remove_422 is True
         assert cfg.remove_validation_error_schema is True
-        assert cfg.enable_bearer_auth is False
-        assert cfg.bearer_auth_name == 'BearerAuth'
 
     def test_custom_values(self):
         cfg = OpenAPICustomConfig(
             remove_422=False,
             remove_validation_error_schema=False,
-            enable_bearer_auth=True,
-            bearer_auth_name='MyAuth',
         )
         assert cfg.remove_422 is False
         assert cfg.remove_validation_error_schema is False
-        assert cfg.enable_bearer_auth is True
-        assert cfg.bearer_auth_name == 'MyAuth'
 
 
 # ── configure_openapi_schema ──────────────────────────────────────────
@@ -75,31 +69,6 @@ class TestConfigureOpenapiSchema:
         schemas = schema.get('components', {}).get('schemas', {})
         assert 'ValidationError' not in schemas
         assert 'HTTPValidationError' not in schemas
-
-    def test_enable_bearer_auth(self):
-        app = _make_app_with_route(OpenAPICustomConfig(enable_bearer_auth=True))
-        schema = app.openapi()
-        assert schema is not None
-        security_schemes = schema['components']['securitySchemes']
-        assert 'BearerAuth' in security_schemes
-        assert security_schemes['BearerAuth']['scheme'] == 'bearer'
-        # 全局 security 应被设置
-        assert any('BearerAuth' in s for s in schema.get('security', []))
-
-    def test_bearer_auth_custom_name(self):
-        app = _make_app_with_route(OpenAPICustomConfig(
-            enable_bearer_auth=True,
-            bearer_auth_name='TokenAuth',
-        ))
-        schema = app.openapi()
-        assert 'TokenAuth' in schema['components']['securitySchemes']
-
-    def test_no_bearer_auth_by_default(self):
-        app = _make_app_with_route(OpenAPICustomConfig(enable_bearer_auth=False))
-        schema = app.openapi()
-        assert schema is not None
-        security_schemes = schema.get('components', {}).get('securitySchemes', {})
-        assert 'BearerAuth' not in security_schemes
 
     def test_schema_cached(self):
         app = _make_app_with_route()

@@ -8,10 +8,11 @@
 - **生命周期管理** — 多注册表、优先级、超时控制、异常策略的启动/关闭钩子
 - **读写分离** — 单库 / 主从 / 集群拓扑的异步引擎管理，线程安全的 Session 自动路由
 - **泛型仓储** — 类型安全的异步 Repository，支持直接实例化与子类继承两种方式
+- **查询解析器** — REST 风格 query string 转 SQLAlchemy 表达式，支持 FIQL 条件、关键字搜索、排序
 - **可组合 Mixin** — 时间戳、审计、软删除等列混入，自由组合
 - **统一响应** — 全局 `APIResponse` 格式，自动追踪 `request_id`
 - **HTTP 异常** — 完整的 4xx 异常子类，内置默认文案
-- **OpenAPI 优化** — 自动清理 422 响应、可选 Bearer 认证
+- **OpenAPI 优化** — 自动清理 422 响应与验证错误模型
 - **日志管理** — request_id 自动注入、uvicorn 接管、多进程安全轮转、幂等初始化、一键配置
 - **健康检查** — 可扩展的检查器模式，内置应用状态与数据库连通性检查，一行开关
 - **配置管理** — 基于 pydantic-settings，支持 `.env` 文件、环境变量前缀、嵌套配置
@@ -93,7 +94,7 @@ app = create_app(
 | 生命周期 | 接入 `fastapi_lifespan`，合并用户注册表与 `core_registry`  |
 | 中间件   | 自动添加 `RequestIdMiddleware`，可选 CORS                  |
 | 路由     | 支持 `APIRouter` 列表或 `(router, kwargs)` 元组            |
-| OpenAPI  | 自动清理 422 响应、可选 Bearer 认证                        |
+| OpenAPI  | 自动清理 422 响应与验证错误模型                            |
 | 数据库   | 可选挂载 `EngineManager` / `SessionFactory` 到 `app.state` |
 | 健康检查 | `health_check=True` 一键启用 `/health` 端点                |
 
@@ -110,7 +111,6 @@ app = create_app(
     title='My Service',
     registries=registry,             # 单个或列表均可
     cors_allow_origins=['*'],
-    openapi_enable_bearer_auth=True,
     health_check=True,          # 启用健康检查
 )
 ```
@@ -223,10 +223,12 @@ from fastapi_augment.db.sqlalchemy import RepositoryBase
 # 方式 1：直接实例化 — 显式传入模型类
 user_repo = RepositoryBase(User)
 
+
 # 方式 2：子类继承 — 通过泛型参数绑定模型，可扩展自定义方法
 class UserRepo(RepositoryBase[User]):
     async def find_by_email(self, session, email: str) -> User | None:
-        return await self.get_one(session, email=email)
+        return await self.get_first(session, email=email)
+
 
 user_repo = UserRepo()  # 无需再传 User
 ```
@@ -242,7 +244,8 @@ async with sessions.transaction() as session:
 # Read（实例方法）
 async with sessions.read_session() as session:
     user = await user_repo.get(session, id_='01HXK...')
-    user = await user_repo.get_one(session, name='alice')
+    user = await user_repo.get_first(session, name='alice')        # 取第一条，无匹配返回 None
+    user = await user_repo.get_unique(session, email='a@b.com')   # 精确唯一，多条匹配抛 MultipleResultsFound
     users = await user_repo.list(session, role='admin', order_by=['-created_at'], limit=10)
     total = await user_repo.count(session, is_active=True)
     has_admin = await user_repo.exists(session, role='admin')
@@ -280,6 +283,92 @@ await user_repo.list(session, expressions=(User.age > 18,))
 
 # 排序：字段名前缀 - 表示降序
 await user_repo.list(session, order_by=['-created_at', 'name'])
+```
+
+### 查询解析器 — `query_parser`
+
+将 REST 风格的 query string 转为 SQLAlchemy `ColumnElement` 条件表达式，可直接传入 `RepositoryBase` 的 `expressions` / `order_by` 参数。
+
+#### where 组合条件（FIQL 风格）
+
+```
+where = and_group ("," and_group)*        , 表示 OR
+and_group = unit (";" unit)*              ; 表示 AND
+unit = "(" where ")" | condition
+condition = field OP value
+```
+
+**支持的操作符：**
+
+| 语法             | 含义                 | 示例                      |
+| ---------------- | -------------------- | ------------------------- |
+| `field==value`   | 等于                 | `status==1`               |
+| `field!=value`   | 不等                 | `status!=0`               |
+| `field~=value`   | 模糊包含 (ILIKE)     | `name~=张`                |
+| `field>value`    | 大于                 | `age>18`                  |
+| `field>=value`   | 大于等于             | `age>=18`                 |
+| `field<value`    | 小于                 | `age<60`                  |
+| `field<=value`   | 小于等于             | `age<=60`                 |
+| `field~start~end`| 区间 (BETWEEN)       | `age~18~60`               |
+
+```python
+from fastapi_augment.db.sqlalchemy import parse_where
+
+# 昵称含张 且 状态非禁用
+expr = parse_where('nickname~=张;status!=0', User)
+
+# 括号内 OR，与区间 AND
+expr = parse_where('(nickname~=张,username~=王);age~20~30', User)
+```
+
+#### lookup 精确匹配
+
+```python
+from fastapi_augment.db.sqlalchemy import parse_lookup
+
+# 单字段精确匹配
+expr = parse_lookup('phone==13800138000', User, fields={'phone', 'email'})
+
+# 多字段 AND（; 分隔）
+expr = parse_lookup('phone==138;status==1', User, fields={'phone', 'status'})
+```
+
+#### 关键字搜索
+
+```python
+from fastapi_augment.db.sqlalchemy import parse_keyword
+
+# 多字段 OR 模糊搜索
+expr = parse_keyword('admin', 'username,email,nickname', User)
+```
+
+#### 排序
+
+```python
+from fastapi_augment.db.sqlalchemy import parse_sort
+
+# - 前缀表示降序，无前缀为升序
+order_by = parse_sort('-created_at,nickname', User)
+```
+
+#### 一键组合 — `build_query_expressions`
+
+```python
+from fastapi_augment.db.sqlalchemy import build_query_expressions
+
+expressions, order_by = build_query_expressions(
+    User,
+    where='status!=0;age>=18',
+    q='admin',
+    q_field='username,nickname',
+    sort='-created_at',
+)
+
+# 直接传给 paginate / list
+result = await user_repo.paginate(
+    session, page=1, size=10,
+    expressions=expressions, order_by=order_by,
+)
 ```
 
 ### 数据库迁移 CLI — `fastapi-augment-migrate`
@@ -617,6 +706,7 @@ fastapi_augment/
 │       ├── session.py        # SessionFactory（读写分离）
 │       ├── model_base.py     # ModelBase（ULID 主键）
 │       ├── repository_base.py # RepositoryBase（泛型仓储 + paginate）
+│       ├── query_parser.py    # 查询解析器（where / lookup / keyword / sort）
 │       ├── migrate.py        # 数据库迁移 CLI
 │       ├── migrations/       # Alembic 迁移环境（env.py / script.py.mako）
 │       └── mixins/           # Timestamp / Audit / SoftDelete

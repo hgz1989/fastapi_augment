@@ -52,6 +52,23 @@ class EnvSettings(BaseSettings):
         extra='ignore',
     )
 
+    # ------------------------------
+    # 项目信息
+    # ------------------------------
+    project_debug: bool = True
+    project_title: str = 'FastAPI Augment'
+    project_summary: str = 'FastAPI Augment - Extended utilities and patterns for FastAPI'
+    project_description: str = (
+        'FastAPI Augment is a lightweight extension library for FastAPI that '
+        'provides out-of-the-box solutions for common backend challenges. It '
+        'includes asynchronous database session management (with read-write splitting), '
+        'unified API response models, pagination helpers, and streamlined dependency '
+        'injection for transactional operations. Designed to reduce boilerplate and '
+        'enforce clean architecture, it accelerates the development of production-ready '
+        'web services.'
+    )
+    project_version: str = '0.1.0'
+
     @classmethod
     def from_env(cls: type[_S], **kwargs: Any) -> _S:
         """从环境加载配置，支持 ``SettingsConfigDict`` 所有参数。

@@ -50,6 +50,7 @@ class RepositoryBase(Generic[ModelT]):
         await user_repo.list(session, id=["01A", "02B"])   # sequence -> IN
         await user_repo.list(session, name=None)           # None -> IS NULL
     """
+    model: type[ModelT]  # The SQLAlchemy model class to operate on.
 
     def __init__(self, model: type[ModelT] | None = None):
         """Initialize the repository.
@@ -61,6 +62,7 @@ class RepositoryBase(Generic[ModelT]):
         """
         if model is None:
             model = self._resolve_generic_model()
+
         self.model = model
 
     def _resolve_generic_model(self) -> type[ModelT]:
@@ -72,6 +74,7 @@ class RepositoryBase(Generic[ModelT]):
         Raises:
             TypeError: If no model type can be inferred.
         """
+        # noinspection PyUnresolvedReferences
         for base in type(self).__orig_bases__:
             args = typing.get_args(base)
             if args and isinstance(args[0], type) and issubclass(args[0], ModelBase):
@@ -97,7 +100,32 @@ class RepositoryBase(Generic[ModelT]):
         """
         return await session.get(self.model, id_)
 
-    async def get_one(
+    async def get_unique(
+            self,
+            session: AsyncSession,
+            *,
+            expressions: Sequence[ColumnElement] | None = None,
+            **filters: Any,
+    ) -> ModelT | None:
+        """Fetch exactly zero or one row matching filters.
+        If more than one row matches, raises MultipleResultsFound.
+
+        Args:
+            session: The async session to use.
+            expressions: Raw SQLAlchemy filter expressions.
+            **filters: Equality keyword filters.
+
+        Returns:
+            Matching instance if exactly one found, None if no match.
+
+        Raises:
+            MultipleResultsFound: More than one row satisfies the filter.
+        """
+        stmt = select(self.model).where(*self._conditions(expressions, filters))
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_first(
             self,
             session: AsyncSession,
             *,

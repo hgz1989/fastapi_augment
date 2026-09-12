@@ -116,26 +116,6 @@ class SessionFactory:
         async with factory() as session:
             yield session
 
-    # ── FastAPI Dependencies ─────────────────────────────────────────────
-
-    async def depends_write(self) -> AsyncGenerator[AsyncSession, None]:
-        """FastAPI ``Depends()`` — inject a write session.
-
-        Returns:
-            An async session bound to the primary engine.
-        """
-        async with self.write_session() as session:
-            yield session
-
-    async def depends_read(self) -> AsyncGenerator[AsyncSession, None]:
-        """FastAPI ``Depends()`` — inject a read session.
-
-        Returns:
-            An async session bound to a read engine.
-        """
-        async with self.read_session() as session:
-            yield session
-
     # ── Transactional helpers ────────────────────────────────────────────
 
     @asynccontextmanager
@@ -158,6 +138,35 @@ class SessionFactory:
             except Exception:
                 await session.rollback()
                 raise
+
+    # ── FastAPI Dependencies ─────────────────────────────────────────────
+
+    async def depends_write(self) -> AsyncGenerator[AsyncSession, None]:
+        """FastAPI ``Depends()`` — inject a write session.
+
+        Returns:
+            An async session bound to the primary engine.
+        """
+        async with self.write_session() as session:
+            yield session
+
+    async def depends_read(self) -> AsyncGenerator[AsyncSession, None]:
+        """FastAPI ``Depends()`` — inject a read session.
+
+        Returns:
+            An async session bound to a read engine.
+        """
+        async with self.read_session() as session:
+            yield session
+
+    async def depends_transaction(self) -> AsyncGenerator[AsyncSession, None]:
+        """FastAPI ``Depends()`` — inject a transaction.
+
+        Returns:
+            An async session bound to the primary engine.
+        """
+        async with self.transaction() as session:
+            yield session
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 
