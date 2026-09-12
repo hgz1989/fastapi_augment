@@ -1,7 +1,7 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 日志过滤器，统一uvicorn日志名称
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 日志过滤器，统一uvicorn日志名称
 """
 import logging
 

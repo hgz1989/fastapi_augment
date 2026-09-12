@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/1
-@Description    : 审计混入类，可整体或细粒度组合 created_by / updated_by 列。
+@Description    : 审计混入类，可整体或细粒度组合 created_by / updated_by 列
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ class CreatedByMixin:
     """创建人混入类
 
     仅添加 created_by 一列，记录创建操作人ID，
-    默认对齐 ModelBase 的 ULID 主键长度（String(26)）。
+    默认对齐 ModelBase 的 ULID 主键长度（String(26)）
     """
 
     created_by: Mapped[str | None] = mapped_column(
@@ -27,7 +27,7 @@ class CreatedByMixin:
 class UpdatedByMixin:
     """更新人混入类
 
-    仅添加 updated_by 一列，记录最近更新操作人ID。
+    仅添加 updated_by 一列，记录最近更新操作人ID
     """
 
     updated_by: Mapped[str | None] = mapped_column(

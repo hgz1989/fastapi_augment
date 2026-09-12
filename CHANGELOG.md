@@ -4,6 +4,39 @@
 
 ---
 
+## [0.1.4] — 2026-09-12
+
+### Added
+
+- **`DatabaseSettings`** — 新增独立数据库配置模块，支持多数据库引擎、自动推导驱动/端口、连接池、SSL 等配置
+- **`Settings.from_dotenv()`** — 从 .env 文件加载配置
+- **`Settings.from_json()`** — 从 JSON 文件加载配置
+- **`Settings.from_yaml()`** — 从 YAML 文件加载配置
+- **`Settings.from_toml()`** — 从 TOML 文件加载配置
+
+### Changed
+
+- **`EnvSettings` → `AugmentBaseSettings`** — 重命名配置基类，不再局限于环境变量来源，避免与用户自定义 `Settings` 类名冲突
+- **`settings.py` → `base_settings.py`** — 重命名配置模块文件，与类名语义对齐
+- **`Settings` 重构** — 提取 `_build()` 内部方法统一各来源的配置构建逻辑
+- **日志模块** — 目录从 `log` 重命名为 `logger`；`logger/factory.py` → `logger/record_factory.py` 避免与根目录 `factory.py` 混淆
+- **`DatabaseSettings` 精简** — 提取 `_create_url()` 公共方法消除 `url`/`sync_url` 重复代码，`_SQLALCHEMY_INSTALL_MSG` 提取为模块级常量
+- **代码风格规范化** — 全量对齐项目代码风格规范：
+  - 21 个文件移除 docstring/注释结尾句号（约 80 处）
+  - 7 个函数/属性补全 `Returns:` 段（`camel_to_snake`、`snake_to_camel`、`random_string`、`BaseChecker.name`、`AppChecker.name`、`DatabaseChecker.name`、`health_check`）
+  - `engine.py` `__init__` 移除 `-> None` 返回注解
+
+### Fixed
+
+- **`paginate` 分页计算** — 移除 `pages` 计算中 `if size > 0 else 0` 死代码（`size` 已被 `max(1, size)` 保底）
+- **`repository_base`** — `paginate` 入口添加 `page = max(1, page)` / `size = max(1, size)` 边界校验；`list` 方法 `offset`/`limit` 负值防护
+- **`random_string`** — 添加 `length < 1` 入口校验，防止静默返回空串
+- **`DEFAULT_ERR_MSG`** — 补充 `HTTP_422_UNPROCESSABLE_CONTENT` 状态码，消除 deprecation 警告
+- **`openapi.py`** — 异常处理从 `_logger.warning` 升级为 `_logger.exception` 记录完整堆栈
+- **`exception_handlers`** — 全部处理器 docstring 句号清除
+
+---
+
 ## [0.1.3] — 2026-09-11
 
 ### Added
@@ -96,7 +129,8 @@
 | `middlewares/` | `RequestIdMiddleware`（ULID 格式），`ContextVar` 全链路传递 |
 | `openapi.py` | OpenAPI schema 自动清理 422 响应与验证错误模型 |
 
-[Latest]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.3...develop
+[Latest]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.4...develop
+[0.1.4]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/hgz1989/fastapi-augment/compare/v0.1.0...v0.1.1

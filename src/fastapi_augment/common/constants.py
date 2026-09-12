@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/4
-@Description    :
+@Description    : 全局常量与统一默认错误文案
 """
 from starlette import status
 
@@ -21,6 +21,7 @@ DEFAULT_ERR_MSG: dict[int, str] = {
     status.HTTP_413_CONTENT_TOO_LARGE: 'Payload too large',
     status.HTTP_414_URI_TOO_LONG: 'URI too long',
     status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: 'Unsupported media type',
+    status.HTTP_422_UNPROCESSABLE_CONTENT: 'Unprocessable entity',
     status.HTTP_423_LOCKED: 'Locked',
     status.HTTP_429_TOO_MANY_REQUESTS: 'Too many requests',
 }

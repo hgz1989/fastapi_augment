@@ -1,9 +1,9 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 健康检查路由工厂
-              - 提供 create_health_router() 创建可配置的健康检查路由
-              - 自动注册 AppChecker，可选注册 DatabaseChecker 和自定义检查器
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 健康检查路由工厂
+                  - 提供 create_health_router() 创建可配置的健康检查路由
+                  - 自动注册 AppChecker，可选注册 DatabaseChecker 和自定义检查器
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def create_health_router(
     include_db_check: bool = True,
     extra_checkers: Sequence[BaseChecker] | None = None,
 ) -> APIRouter:
-    """创建健康检查路由。
+    """创建健康检查路由
 
     默认包含 ``AppChecker``（应用状态），可选 ``DatabaseChecker``（数据库连通性），
     以及任意自定义检查器::
@@ -59,9 +59,12 @@ def create_health_router(
 
     @router.get(path, response_model=HealthResponse)
     async def health_check(request: Request, response: Response) -> HealthResponse:
-        """执行所有健康检查并返回聚合结果。
+        """执行所有健康检查并返回聚合结果
 
-        任一检查器返回 unhealthy 时，HTTP 状态码为 503。
+        任一检查器返回 unhealthy 时，HTTP 状态码为 503
+
+        Returns:
+            聚合后的健康检查响应
         """
         results = []
         for checker in checkers:

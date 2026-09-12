@@ -1,7 +1,7 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/7/4
-@Description: Request‑ID 追踪 ASGI 中间件与上下文工具
+@Author         : zarkhan
+@CreateDate     : 2026/7/4
+@Description    : Request-ID 追踪 ASGI 中间件与上下文工具
 """
 from contextvars import ContextVar, Token
 from uuid import uuid4

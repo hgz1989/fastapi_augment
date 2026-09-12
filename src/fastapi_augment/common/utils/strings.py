@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/4
-@Description    :
+@Description    : 字符串工具函数——命名转换、随机串、JSON 序列化
 """
 import json
 import random
@@ -40,7 +40,11 @@ _ORJSON_OPT_INDENT_2 = 0x04
 
 # ── 字符串转换 ──
 def camel_to_snake(s: str) -> str:
-    """驼峰转下划线（支持连续大写）"""
+    """驼峰转下划线（支持连续大写）
+
+    Returns:
+        转换后的下划线命名字符串
+    """
     if not s:
         return s
     result: list[str] = []
@@ -58,7 +62,11 @@ def camel_to_snake(s: str) -> str:
 
 
 def snake_to_camel(s: str) -> str:
-    """下划线转驼峰（首字母大写）"""
+    """下划线转驼峰（首字母大写）
+
+    Returns:
+        转换后的驼峰命名字符串
+    """
     if not s:
         return s
     return ''.join(part.capitalize() for part in s.split('_'))
@@ -72,9 +80,14 @@ def random_string(
 ) -> str:
     """生成随机字符串，支持自定义字符集
 
+    Returns:
+        指定长度的随机字符串
+
     Raises:
-        ValueError: 字符集为空时（exclude 排除了所有字符）
+        ValueError: length 非正整数或字符集为空时（exclude 排除了所有字符）
     """
+    if length < 1:
+        raise ValueError(f'length 必须为正整数，当前值: {length}')
     if chars is None:
         chars = string.ascii_letters + string.digits
     if exclude:

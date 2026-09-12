@@ -1,7 +1,7 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 自定义日志记录工厂，注入request_id到每条日志
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 自定义日志记录工厂，注入request_id到每条日志
 """
 import logging
 from typing import Any
@@ -28,9 +28,9 @@ def _record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
 
 
 def install_request_id_factory() -> None:
-    """安装自定义日志记录工厂，使所有日志自动携带request_id。
+    """安装自定义日志记录工厂，使所有日志自动携带request_id
 
-    幂等操作：重复调用不会叠加包装层。
+    幂等操作：重复调用不会叠加包装层
     """
     if logging.getLogRecordFactory() is _record_factory:
         return

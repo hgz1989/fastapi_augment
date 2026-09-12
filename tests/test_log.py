@@ -17,7 +17,7 @@ from fastapi_augment.logger import (
     set_log_level,
     set_log_format,
 )
-from fastapi_augment.logger.factory import _record_factory, install_request_id_factory
+from fastapi_augment.logger.record_factory import _record_factory, install_request_id_factory
 from fastapi_augment.middlewares.request_id import request_id_ctx_var
 
 

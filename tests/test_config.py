@@ -1,5 +1,5 @@
 """
-config 模块测试 — EnvSettings 配置管理
+config 模块测试 — AugmentBaseSettings 配置管理
 """
 import os
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic_settings import SettingsConfigDict
 
-from fastapi_augment.config import EnvSettings
+from fastapi_augment.config import AugmentBaseSettings
 
 
 # ── from_env() 类方法 ───────────────────────────────────────────────
@@ -19,7 +19,7 @@ class TestFromEnv:
         env_file = tmp_path / '.env'
         env_file.write_text('DATABASE_URL=sqlite:///test.db\n')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             database_url: str = ''
 
         s = Settings.from_env(env_file=str(env_file))
@@ -30,7 +30,7 @@ class TestFromEnv:
         env_file = tmp_path / '.env'
         env_file.write_text('NAME=hello\n')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             name: str = ''
 
         s = Settings.from_env(env_file=env_file)
@@ -40,7 +40,7 @@ class TestFromEnv:
         """from_env 支持 env_prefix"""
         monkeypatch.setenv('APP_SECRET', 'my-secret')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             secret: str = ''
 
         s = Settings.from_env(env_prefix='APP_')
@@ -50,7 +50,7 @@ class TestFromEnv:
         """from_env 的 kwargs 直接覆盖字段值"""
         monkeypatch.setenv('PORT', '8080')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             port: int = 0
             debug: bool = False
 
@@ -60,7 +60,7 @@ class TestFromEnv:
 
     def test_from_env_without_overrides(self):
         """不传任何覆盖参数时，等同于直接实例化"""
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             name: str = 'default'
 
         s = Settings.from_env()
@@ -77,7 +77,7 @@ class TestFromEnv:
             host: str = ''
             port: int = 0
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             db: DbConfig = DbConfig()
 
         s = Settings.from_env(env_nested_delimiter='__')
@@ -87,11 +87,11 @@ class TestFromEnv:
 
 # ── 基础加载 ─────────────────────────────────────────────────────────
 
-class TestEnvSettingsBasic:
+class TestAugmentBaseSettingsBasic:
 
     def test_load_from_kwargs(self):
         """直接通过关键字参数传入配置"""
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             database_url: str = ''
             debug: bool = False
 
@@ -101,7 +101,7 @@ class TestEnvSettingsBasic:
 
     def test_default_values(self):
         """未传入的字段使用默认值"""
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             name: str = 'default'
             count: int = 0
 
@@ -111,7 +111,7 @@ class TestEnvSettingsBasic:
 
     def test_env_var_override(self, monkeypatch):
         """环境变量覆盖默认值"""
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             secret_key: str = 'fallback'
 
         monkeypatch.setenv('SECRET_KEY', 'from-env')
@@ -121,14 +121,14 @@ class TestEnvSettingsBasic:
 
 # ── .env 文件加载 ────────────────────────────────────────────────────
 
-class TestEnvSettingsDotEnv:
+class TestAugmentBaseSettingsDotEnv:
 
     def test_load_from_dotenv_via_model_config(self, tmp_path):
         """通过 model_config 指定 .env 文件加载"""
         env_file = tmp_path / '.env'
         env_file.write_text('DATABASE_URL=postgres://localhost/test\nDEBUG=true\n')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             model_config = SettingsConfigDict(env_file=str(env_file))
             database_url: str = ''
             debug: bool = False
@@ -142,7 +142,7 @@ class TestEnvSettingsDotEnv:
         env_file = tmp_path / '.env'
         env_file.write_text('MY_VALUE=from-file\n')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             model_config = SettingsConfigDict(env_file=str(env_file))
             my_value: str = ''
 
@@ -152,7 +152,7 @@ class TestEnvSettingsDotEnv:
 
     def test_nonexistent_env_file_ignored(self, tmp_path):
         """不存在的 .env 文件不报错（pydantic-settings 默认行为）"""
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             model_config = SettingsConfigDict(env_file=str(tmp_path / 'nonexistent.env'))
             name: str = 'default'
 
@@ -162,14 +162,14 @@ class TestEnvSettingsDotEnv:
 
 # ── 前缀 ─────────────────────────────────────────────────────────────
 
-class TestEnvSettingsPrefix:
+class TestAugmentBaseSettingsPrefix:
 
     def test_env_prefix_via_model_config(self, monkeypatch):
         """通过 model_config 设置 env_prefix"""
         monkeypatch.setenv('APP_DATABASE_URL', 'sqlite:///app.db')
         monkeypatch.setenv('OTHER_DATABASE_URL', 'sqlite:///other.db')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             model_config = SettingsConfigDict(env_prefix='APP_')
             database_url: str = ''
 
@@ -179,7 +179,7 @@ class TestEnvSettingsPrefix:
 
 # ── 嵌套配置 ─────────────────────────────────────────────────────────
 
-class TestEnvSettingsNested:
+class TestAugmentBaseSettingsNested:
 
     def test_nested_delimiter_via_model_config(self, monkeypatch):
         """model_config 方式支持嵌套配置"""
@@ -192,7 +192,7 @@ class TestEnvSettingsNested:
             host: str = ''
             port: int = 0
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             model_config = SettingsConfigDict(env_nested_delimiter='__')
             db: DbConfig = DbConfig()
 
@@ -203,13 +203,13 @@ class TestEnvSettingsNested:
 
 # ── extra='ignore' ───────────────────────────────────────────────────
 
-class TestEnvSettingsExtra:
+class TestAugmentBaseSettingsExtra:
 
     def test_extra_env_vars_ignored(self, monkeypatch):
         """未在模型中声明的环境变量被忽略，不报错"""
         monkeypatch.setenv('UNKNOWN_VAR', 'whatever')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             name: str = 'test'
 
         s = Settings()
@@ -220,7 +220,7 @@ class TestEnvSettingsExtra:
         monkeypatch.setenv('PORT', '8080')
         monkeypatch.setenv('DEBUG', 'true')
 
-        class Settings(EnvSettings):
+        class Settings(AugmentBaseSettings):
             port: int = 0
             debug: bool = False
 

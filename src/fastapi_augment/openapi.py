@@ -3,6 +3,7 @@
 @CreateDate     : 2026/9/4
 @Description    : OpenAPI文档自定义配置，适配FastAPI factory工厂调用
 """
+from dataclasses import dataclass
 from logging import getLogger
 from typing import Any
 
@@ -12,16 +13,12 @@ from fastapi.openapi.utils import get_openapi
 _logger = getLogger(__name__)
 
 
+@dataclass(slots=True)
 class OpenAPICustomConfig:
     """OpenAPI自定义配置参数，方便工厂传入控制行为"""
 
-    def __init__(
-            self,
-            remove_422: bool = True,
-            remove_validation_error_schema: bool = True,
-    ):
-        self.remove_422 = remove_422
-        self.remove_validation_error_schema = remove_validation_error_schema
+    remove_422: bool = True
+    remove_validation_error_schema: bool = True
 
 
 def configure_openapi_schema(
@@ -66,8 +63,8 @@ def configure_openapi_schema(
 
             openapi_schema = get_openapi(**kwargs)
         except Exception as exc:
-            # 生成openapi异常，不阻断服务启动
-            _logger.warning('Generate openapi schema failed: %s', exc)
+            # 生成openapi异常，不阻断服务启动；记录完整堆栈便于排查
+            _logger.exception('Generate openapi schema failed: %s', exc)
             return None
 
         components = openapi_schema.setdefault('components', {})

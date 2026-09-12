@@ -3,6 +3,7 @@
 @CreateDate     : 2026/9/12
 @Description    : 数据库配置——独立的嵌套 BaseModel，支持多数据库、自动推导驱动/端口
 """
+from __future__ import annotations
 from functools import cached_property
 from typing import ClassVar, Self
 from urllib.parse import parse_qsl
@@ -12,10 +13,10 @@ from pydantic import BaseModel, ConfigDict, model_validator
 try:
     from sqlalchemy import URL
 
-    _HAS_SQLALCHEMY = True
 except ImportError:
     URL = None
-    _HAS_SQLALCHEMY = False
+
+_SQLALCHEMY_INSTALL_MSG = '使用数据库功能需要安装 sqlalchemy 库: pip install "fastapi-augment[sqlalchemy]"'
 
 
 class DatabaseSettings(BaseModel):
@@ -25,8 +26,6 @@ class DatabaseSettings(BaseModel):
         .env 中写 ``IAM_DATABASE__HOST=192.168.1.100`` 即可覆盖 host
         .env 中写 ``IAM_DATABASE__ENGINE=mysql`` 即自动切换驱动和端口
     """
-    model_config = ConfigDict(extra='ignore')
-
     # ------------------------------
     # 类级别常量
     # ------------------------------
@@ -41,7 +40,7 @@ class DatabaseSettings(BaseModel):
         'sqlite': 'aiosqlite',
         'dm': 'dmAsync',
         'oracle': 'oracledb',
-        'mssql': 'aioodbc',
+        'mssql': 'aioodbc'
     }
     # 各引擎的同步驱动（供 Alembic 等工具使用）
     _SYNC_DRIVERS: ClassVar[dict[str, str]] = {
@@ -50,7 +49,7 @@ class DatabaseSettings(BaseModel):
         'sqlite': 'pysqlite',
         'dm': 'dmPython',
         'oracle': 'oracledb',
-        'mssql': 'pyodbc',
+        'mssql': 'pyodbc'
     }
     # 各引擎的默认端口
     _DEFAULT_PORTS: ClassVar[dict[str, int]] = {
@@ -58,14 +57,16 @@ class DatabaseSettings(BaseModel):
         'mysql': 3306,
         'dm': 5236,
         'oracle': 1521,
-        'mssql': 1433,
+        'mssql': 1433
     }
     # 各引擎在 URL query 中表示 SSL 模式的参数名
     _SSL_MODE_KEYS: ClassVar[dict[str, str]] = {
         'postgresql': 'sslmode',
         'mysql': 'ssl_mode',
-        'dm': 'ssl_mode',
+        'dm': 'ssl_mode'
     }
+
+    model_config = ConfigDict(extra='ignore')
 
     # ------------------------------
     # 公共配置
@@ -80,13 +81,6 @@ class DatabaseSettings(BaseModel):
     file_path: str = ''
     # 连接标识，便于 DBA 在 pg_stat_activity 等视图中定位来源
     application_name: str = 'iam'
-
-    # ------------------------------
-    # SQLAlchemy 专属配置
-    # ------------------------------
-    driver: str = ''  # 空表示按 engine 自动推导
-    extra_query: str = ''
-    echo: bool = False
 
     # 连接池
     pool_enabled: bool = True
@@ -109,11 +103,22 @@ class DatabaseSettings(BaseModel):
     ssl_key: str = ''
 
     # ------------------------------
+    # SQLAlchemy 专属配置
+    # ------------------------------
+    driver: str = ''  # 空表示按 engine 自动推导
+    echo: bool = False
+    extra_query: str = ''
+
+    # ------------------------------
     # 校验与默认值推导
     # ------------------------------
     @model_validator(mode='after')
     def _fill_defaults(self) -> Self:
-        """根据 engine 推导 driver 和 port 的默认值"""
+        """根据 engine 推导 driver 和 port 的默认值
+
+        Returns:
+            填充默认值后的实例自身
+        """
         engine = self.engine.lower()
 
         if not self.driver:
@@ -129,7 +134,11 @@ class DatabaseSettings(BaseModel):
     # ------------------------------
     @property
     def is_file_based(self) -> bool:
-        """是否为文件型数据库（如 SQLite）"""
+        """是否为文件型数据库（如 SQLite）
+
+        Returns:
+            是否为文件型数据库
+        """
         return self.engine.lower() in self._FILE_BASED
 
     @property
@@ -141,8 +150,15 @@ class DatabaseSettings(BaseModel):
         """
         return self.engine.lower() in self._REQUIRES_REFRESH
 
+    # ------------------------------
+    # URL 构建
+    # ------------------------------
     def _build_query(self) -> dict[str, str] | None:
-        """构造 URL 中的 query 参数"""
+        """构造 URL 中的 query 参数
+
+        Returns:
+            query 参数字典，无额外参数时返回 None
+        """
         query: dict[str, str] = dict(parse_qsl(self.extra_query))
 
         if self.application_name:
@@ -154,58 +170,23 @@ class DatabaseSettings(BaseModel):
 
         return query or None
 
-    @cached_property
-    def url_obj(self) -> URL:
-        """构造并返回 SQLAlchemy 的 URL 对象
-
-        使用 URL 对象而非字符串，可避免密码中特殊字符被误解。
-        """
-        drivername = f'{self.engine}+{self.driver}'
-        query = self._build_query()
-
-        # 文件型数据库：不拼 host/port/user/password
-        if self.is_file_based:
-            return URL.create(
-                drivername=drivername,
-                database=self.file_path or self.name,
-                query=query,
-            )
-
-        # 网络型数据库：标准 host/port/user/password/database
-        return URL.create(
-            drivername=drivername,
-            host=self.host,
-            port=self.port,
-            username=self.user,
-            password=self.password,
-            database=self.name,
-            query=query,
-        )
-
-    @cached_property
-    def url(self) -> str:
-        """构造并返回 SQLAlchemy 所需的数据库 URL 字符串
+    def _create_url(self, drivername: str) -> str:
+        """根据 drivername 构造 SQLAlchemy URL 字符串（内部复用）
 
         Returns:
-            拼接好的数据库连接 URL
+            拼接好的数据库连接 URL 字符串
         """
-        return self.url_obj.render_as_string(hide_password=False)
+        if URL is None:
+            raise ImportError(_SQLALCHEMY_INSTALL_MSG)
 
-    @cached_property
-    def sync_url(self) -> str:
-        """同步驱动 URL，供 Alembic 等同步工具使用
-
-        Returns:
-            同步驱动版本的数据库连接 URL
-        """
-        drivername = f'{self.engine}+{self._SYNC_DRIVERS.get(self.engine.lower(), self.driver)}'
         query = self._build_query()
+        extra = {'query': query} if query is not None else {}
 
         if self.is_file_based:
             return URL.create(
                 drivername=drivername,
                 database=self.file_path or self.name,
-                query=query,
+                **extra
             ).render_as_string(hide_password=False)
 
         return URL.create(
@@ -215,5 +196,24 @@ class DatabaseSettings(BaseModel):
             username=self.user,
             password=self.password,
             database=self.name,
-            query=query,
+            **extra
         ).render_as_string(hide_password=False)
+
+    @cached_property
+    def url(self) -> str:
+        """构造并返回异步驱动版本的数据库 URL 字符串
+
+        Returns:
+            异步驱动版本的数据库连接 URL
+        """
+        return self._create_url(f'{self.engine}+{self.driver}')
+
+    @cached_property
+    def sync_url(self) -> str:
+        """构造并返回同步驱动版本的数据库 URL 字符串，供 Alembic 等工具使用
+
+        Returns:
+            同步驱动版本的数据库连接 URL
+        """
+        sync_driver = self._SYNC_DRIVERS.get(self.engine.lower(), self.driver)
+        return self._create_url(f'{self.engine}+{sync_driver}')

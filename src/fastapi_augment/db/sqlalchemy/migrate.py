@@ -1,7 +1,7 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/5
-@Description: 数据库迁移脚本
+@Author         : zarkhan
+@CreateDate     : 2026/9/5
+@Description    : 数据库迁移 CLI 与 Alembic 环境配置生成
 """
 import argparse
 import subprocess
@@ -207,8 +207,8 @@ def _resolve_alembic_config(db_url: str | None = None, project_dir: Path | None 
 def init_project(db_url: str, project_dir: Path | None = None) -> None:
     """初始化项目迁移环境
 
-    在项目根目录生成 alembic.ini 和 alembic/versions/ 目录。
-    若 alembic.ini 已存在则跳过，不覆盖。
+    在项目根目录生成 alembic.ini 和 alembic/versions/ 目录
+    若 alembic.ini 已存在则跳过，不覆盖
 
     Args:
         db_url: 数据库连接URL
@@ -261,8 +261,8 @@ def downgrade(db_url: str | None = None, revision: str = '-1', project_dir: Path
 def generate_migration(message: str, models: str, project_dir: Path | None = None) -> None:
     """生成迁移文件
 
-    调用 alembic revision --autogenerate 生成迁移脚本。
-    需要项目根目录已存在 alembic.ini（通过 init 命令创建）。
+    调用 alembic revision --autogenerate 生成迁移脚本
+    需要项目根目录已存在 alembic.ini（通过 init 命令创建）
 
     Args:
         message: 迁移描述信息

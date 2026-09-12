@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/9
-@Description    :
+@Description    : 项目路径工具函数
 """
 import sys
 from pathlib import Path
@@ -10,10 +10,10 @@ from pathlib import Path
 # 获取项目根目录路径
 def get_root_dir(reference_path: str | Path, parent_index: int) -> Path:
     """
-    动态获取项目根目录路径，兼容源码开发环境与 PyInstaller/Nuitka 打包二进制环境。
+    动态获取项目根目录路径，兼容源码开发环境与 PyInstaller/Nuitka 打包二进制环境
 
     源码模式：以传入的参考路径为基准，向上回溯 parent_index 层目录得到项目根；
-    打包 frozen 模式：自动返回可执行文件(.exe/二进制)所在目录，忽略 reference_path、parent_index。
+    打包 frozen 模式：自动返回可执行文件(.exe/二进制)所在目录，忽略 reference_path、parent_index
 
     Args:
         reference_path: 锚点参考路径，业务调用一般直接传入 __file__

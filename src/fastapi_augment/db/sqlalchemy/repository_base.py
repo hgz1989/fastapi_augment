@@ -175,10 +175,10 @@ class RepositoryBase(Generic[ModelT]):
         if order_by:
             stmt = stmt.order_by(*(self._resolve_order(spec) for spec in order_by))
 
-        if offset:
+        if offset > 0:
             stmt = stmt.offset(offset)
 
-        if limit is not None:
+        if limit is not None and limit > 0:
             stmt = stmt.limit(limit)
 
         result = await session.execute(stmt)
@@ -215,7 +215,7 @@ class RepositoryBase(Generic[ModelT]):
             order_by: Sequence[str | ColumnElement] | None = None,
             **filters: Any,
     ) -> dict[str, Any]:
-        """分页查询，自动执行 count + list 并返回分页结果字典。
+        """分页查询，自动执行 count + list 并返回分页结果字典
 
         内部复用 ``_conditions`` 保证 count 与 list 使用完全相同的过滤条件，
         避免调用方手动写两遍 filter::
@@ -240,8 +240,11 @@ class RepositoryBase(Generic[ModelT]):
             **filters: Equality keyword filters.
 
         Returns:
-            包含 items / page / size / total / pages 的字典。
+            包含 items / page / size / total / pages 的字典
         """
+
+        page = max(1, page)
+        size = max(1, size)
 
         conditions = self._conditions(expressions, filters)
 
@@ -259,7 +262,7 @@ class RepositoryBase(Generic[ModelT]):
         list_stmt = list_stmt.offset(offset).limit(size)
         items = (await session.execute(list_stmt)).scalars().all()
 
-        pages = ceil(total / size) if size > 0 else 0
+        pages = ceil(total / size)
         return {
             'items': items,
             'page': page,

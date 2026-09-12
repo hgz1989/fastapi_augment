@@ -1,7 +1,7 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 健康检查基础模型与检查器抽象基类
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 健康检查基础模型与检查器抽象基类
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from ..schemas import SchemaBase
 
 
 class CheckResult(SchemaBase):
-    """单项检查结果。
+    """单项检查结果
 
     Attributes:
         name: 检查项名称
@@ -32,7 +32,7 @@ class CheckResult(SchemaBase):
 
 
 class HealthResponse(SchemaBase):
-    """健康检查响应体。
+    """健康检查响应体
 
     Attributes:
         status: 总体状态（取所有检查项中最差的状态）
@@ -53,7 +53,7 @@ _STATUS_SEVERITY = {STATUS_HEALTHY: 0, STATUS_DEGRADED: 1, STATUS_UNHEALTHY: 2}
 
 
 def _worst_status(*statuses: str) -> str:
-    """从多个状态中取最差的一个。
+    """从多个状态中取最差的一个
 
     Args:
         *statuses: 待比较的状态字符串
@@ -68,7 +68,7 @@ def _worst_status(*statuses: str) -> str:
 
 
 class BaseChecker(ABC):
-    """健康检查器抽象基类。
+    """健康检查器抽象基类
 
     所有检查器必须实现 ``name`` 属性和 ``check`` 异步方法::
 
@@ -85,12 +85,16 @@ class BaseChecker(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """检查项名称，用于标识和展示。"""
+        """检查项名称，用于标识和展示
+
+        Returns:
+            检查项名称
+        """
         ...
 
     @abstractmethod
     async def check(self, app: Any) -> CheckResult:
-        """执行健康检查。
+        """执行健康检查
 
         Args:
             app: FastAPI 应用实例，可从中读取 app.state 等
