@@ -565,7 +565,7 @@ raise TooManyRequestsError(retry_after=60)
 导入即生效：自动注入 `request_id` 到每条日志、接管 uvicorn/fastapi 日志输出。
 
 ```python
-from fastapi_augment.log import setup_logger, set_log_level
+from fastapi_augment.logger import setup_logger, set_log_level
 
 # 一键配置：控制台 + 按天轮转文件日志
 setup_logger(log_dir='./logs', rotation='day', backup_count=30)

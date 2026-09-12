@@ -38,12 +38,14 @@ def create_health_router(
         ))
 
     Args:
+
         path: 健康检查端点路径
         tags: OpenAPI 标签
         include_db_check: 是否包含数据库连通性检查（需要 app.state.engine_manager）
         extra_checkers: 额外的自定义检查器列表
 
     Returns:
+
         配置好的健康检查 APIRouter
     """
     router = APIRouter(tags=tags or ['Health'])

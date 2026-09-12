@@ -31,7 +31,7 @@ class MultiProcessTimedRotatingFileHandler(TimedRotatingFileHandler):
             try:
                 self.stream = self._open()
             except OSError as exc:
-                _logger.warning('Failed to reopen log file after rollover: %s', exc)
+                _logger.warning('Failed to reopen logger file after rollover: %s', exc)
 
 
 class MonthlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):
