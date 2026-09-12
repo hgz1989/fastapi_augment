@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/1
-@Description    : 软删除混入类，提供 is_deleted / deleted_at 通用列。
+@Description    : 软删除混入类，提供 is_deleted / deleted_at 通用列
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class SoftDeleteMixin:
         await repo.list(session, expressions=(User.not_deleted(),))
 
     注意：软删除只是应用层约定，数据库的唯一约束、外键等
-    不会感知软删状态（软删行仍占用唯一键），需在业务层处理。
+    不会感知软删状态（软删行仍占用唯一键），需在业务层处理
     """
 
     is_deleted: Mapped[bool] = mapped_column(
@@ -58,8 +58,8 @@ class SoftDeleteMixin:
 class SoftDeleteAuditMixin(SoftDeleteMixin):
     """带操作人审计的软删除扩展 Mixin
 
-    在基础软删之上增加 deleted_by，记录是谁执行软删除。
-    需要审计删除人的模型再继承本类，不要全局滥用。
+    在基础软删之上增加 deleted_by，记录是谁执行软删除
+    需要审计删除人的模型再继承本类，不要全局滥用
 
     使用示例::
         await repo.update_by_id(

@@ -129,7 +129,7 @@ class EngineManager:
         await manager.dispose()
     """
 
-    def __init__(self, topology: ClusterTopology) -> None:
+    def __init__(self, topology: ClusterTopology):
         self._topology = topology
         self._engines: dict[str, AsyncEngine] = {}
         self._write_key: str = 'primary'
@@ -200,8 +200,15 @@ class EngineManager:
 
         Returns:
             An async SQLAlchemy engine.
+
+        Raises:
+            KeyError: If the engine key does not exist.
         """
-        return self._engines[name]
+        engine = self._engines.get(name)
+        if engine is None:
+            available = ', '.join(sorted(self._engines)) or '(none)'
+            raise KeyError(f'Engine {name!r} not found; available engines: {available}')
+        return engine
 
     @property
     def engines(self) -> dict[str, AsyncEngine]:

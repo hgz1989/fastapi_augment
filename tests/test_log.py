@@ -1,5 +1,5 @@
 """
-log 模块测试 — factory / filters / handlers / config
+logger 模块测试 — factory / filters / handlers / config
 """
 import logging
 import time
@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pytest
 
-from fastapi_augment.log import (
+from fastapi_augment.logger import (
     NORMAL_FORMAT,
     UvicornNameRewriteFilter,
     MonthlyRotatingFileHandler,
@@ -17,7 +17,7 @@ from fastapi_augment.log import (
     set_log_level,
     set_log_format,
 )
-from fastapi_augment.log.factory import _record_factory, install_request_id_factory
+from fastapi_augment.logger.record_factory import _record_factory, install_request_id_factory
 from fastapi_augment.middlewares.request_id import request_id_ctx_var
 
 
@@ -100,7 +100,7 @@ class TestMonthlyRotatingFileHandler:
 
     def test_compute_rollover_normal_month(self, tmp_path):
         """普通月份：下次轮转为下月1日00:00:00"""
-        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             # 2026-03-15 12:00:00
             current = datetime(2026, 3, 15, 12, 0, 0).timestamp()
@@ -112,7 +112,7 @@ class TestMonthlyRotatingFileHandler:
 
     def test_compute_rollover_december(self, tmp_path):
         """12月：下次轮转为下一年1月1日"""
-        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             current = datetime(2026, 12, 20, 10, 0, 0).timestamp()
             rollover = handler.computeRollover(current)
@@ -123,7 +123,7 @@ class TestMonthlyRotatingFileHandler:
 
     def test_compute_rollover_on_first_day(self, tmp_path):
         """当月1日当天：下次轮转为下月1日"""
-        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = MonthlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             current = datetime(2026, 6, 1, 0, 0, 0).timestamp()
             rollover = handler.computeRollover(current)
@@ -137,7 +137,7 @@ class TestYearlyRotatingFileHandler:
 
     def test_compute_rollover_mid_year(self, tmp_path):
         """年中：下次轮转为下一年1月1日"""
-        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             current = datetime(2026, 7, 15, 12, 0, 0).timestamp()
             rollover = handler.computeRollover(current)
@@ -148,7 +148,7 @@ class TestYearlyRotatingFileHandler:
 
     def test_compute_rollover_jan_first(self, tmp_path):
         """1月1日当天：下次轮转仍为下一年1月1日"""
-        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             current = datetime(2026, 1, 1, 0, 0, 0).timestamp()
             rollover = handler.computeRollover(current)
@@ -159,7 +159,7 @@ class TestYearlyRotatingFileHandler:
 
     def test_compute_rollover_dec_31(self, tmp_path):
         """12月31日：下次轮转为次日（下一年1月1日）"""
-        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.log'))
+        handler = YearlyRotatingFileHandler(str(tmp_path / 'test.logger'))
         try:
             current = datetime(2026, 12, 31, 23, 59, 59).timestamp()
             rollover = handler.computeRollover(current)
@@ -173,7 +173,7 @@ class TestMultiProcessTimedRotatingFileHandler:
 
     def test_do_rollover_permission_error(self, tmp_path):
         """doRollover 遇到 PermissionError 时不抛出，重新打开文件流"""
-        log_file = tmp_path / 'test.log'
+        log_file = tmp_path / 'test.logger'
         log_file.write_text('old content')
         handler = MultiProcessTimedRotatingFileHandler(
             str(log_file), when='midnight', backupCount=3
@@ -239,21 +239,21 @@ class TestSetupLogger:
         root = logging.getLogger()
         before_count = len([h for h in root.handlers if isinstance(h, logging.FileHandler)])
 
-        setup_logger(log_dir=str(tmp_path), filename='test.log', rotation='day')
+        setup_logger(log_dir=str(tmp_path), filename='test.logger', rotation='day')
 
         after_count = len([h for h in root.handlers if isinstance(h, logging.FileHandler)])
         assert after_count == before_count + 1
 
         # 清理
         for h in root.handlers[:]:
-            if isinstance(h, logging.FileHandler) and 'test.log' in getattr(h, 'baseFilename', ''):
+            if isinstance(h, logging.FileHandler) and 'test.logger' in getattr(h, 'baseFilename', ''):
                 h.close()
                 root.removeHandler(h)
 
     def test_setup_with_month_rotation(self, tmp_path):
         """setup_logger 使用 month 轮转创建 MonthlyRotatingFileHandler"""
         root = logging.getLogger()
-        setup_logger(log_dir=str(tmp_path), filename='monthly.log', rotation='month')
+        setup_logger(log_dir=str(tmp_path), filename='monthly.logger', rotation='month')
 
         monthly_handlers = [
             h for h in root.handlers
@@ -263,14 +263,14 @@ class TestSetupLogger:
 
         # 清理
         for h in root.handlers[:]:
-            if isinstance(h, logging.FileHandler) and 'monthly.log' in getattr(h, 'baseFilename', ''):
+            if isinstance(h, logging.FileHandler) and 'monthly.logger' in getattr(h, 'baseFilename', ''):
                 h.close()
                 root.removeHandler(h)
 
     def test_setup_with_year_rotation(self, tmp_path):
         """setup_logger 使用 year 轮转创建 YearlyRotatingFileHandler"""
         root = logging.getLogger()
-        setup_logger(log_dir=str(tmp_path), filename='yearly.log', rotation='year')
+        setup_logger(log_dir=str(tmp_path), filename='yearly.logger', rotation='year')
 
         yearly_handlers = [
             h for h in root.handlers
@@ -280,7 +280,7 @@ class TestSetupLogger:
 
         # 清理
         for h in root.handlers[:]:
-            if isinstance(h, logging.FileHandler) and 'yearly.log' in getattr(h, 'baseFilename', ''):
+            if isinstance(h, logging.FileHandler) and 'yearly.logger' in getattr(h, 'baseFilename', ''):
                 h.close()
                 root.removeHandler(h)
 
@@ -300,22 +300,22 @@ class TestSetupLogger:
     def test_setup_idempotent_same_path(self, tmp_path):
         """相同路径重复调用不重复添加处理器"""
         root = logging.getLogger()
-        setup_logger(log_dir=str(tmp_path), filename='dup.log')
+        setup_logger(log_dir=str(tmp_path), filename='dup.logger')
         count_after_first = len([
             h for h in root.handlers
-            if isinstance(h, logging.FileHandler) and 'dup.log' in getattr(h, 'baseFilename', '')
+            if isinstance(h, logging.FileHandler) and 'dup.logger' in getattr(h, 'baseFilename', '')
         ])
 
-        setup_logger(log_dir=str(tmp_path), filename='dup.log')
+        setup_logger(log_dir=str(tmp_path), filename='dup.logger')
         count_after_second = len([
             h for h in root.handlers
-            if isinstance(h, logging.FileHandler) and 'dup.log' in getattr(h, 'baseFilename', '')
+            if isinstance(h, logging.FileHandler) and 'dup.logger' in getattr(h, 'baseFilename', '')
         ])
         assert count_after_first == count_after_second
 
         # 清理
         for h in root.handlers[:]:
-            if isinstance(h, logging.FileHandler) and 'dup.log' in getattr(h, 'baseFilename', ''):
+            if isinstance(h, logging.FileHandler) and 'dup.logger' in getattr(h, 'baseFilename', ''):
                 h.close()
                 root.removeHandler(h)
 

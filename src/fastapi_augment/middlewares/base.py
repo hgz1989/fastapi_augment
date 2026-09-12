@@ -32,11 +32,11 @@ class BaseASGIMiddleware:
         pass
 
     async def wrap_send(self, message: Message) -> Message:  # noqa: no-self-use
-        """http.response.start消息钩子，可以修改headers等。
+        """http.response.start消息钩子，可以修改headers等
 
-        返回修改后的message对象。
-        仅HTTP模式生效；websocket不会进入此逻辑。
-        默认实现直接返回原message，子类按需覆盖。
+        返回修改后的message对象
+        仅HTTP模式生效；websocket不会进入此逻辑
+        默认实现直接返回原message，子类按需覆盖
         （保留self参数，子类覆盖时需要访问实例属性）
 
         Args:

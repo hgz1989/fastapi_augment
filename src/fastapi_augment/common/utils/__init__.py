@@ -1,7 +1,7 @@
 """
 @Author         : hangu
 @CreateDate     : 2026/9/4
-@Description    :
+@Description    : 通用工具函数（路径、字符串、JSON 序列化）
 """
 from .paths import get_root_dir
 from .strings import (

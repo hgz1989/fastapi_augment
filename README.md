@@ -560,12 +560,12 @@ raise BadRequestError(detail='用户名不能为空')
 raise TooManyRequestsError(retry_after=60)
 ```
 
-### 日志管理 — `log`
+### 日志管理 — `logger`
 
 导入即生效：自动注入 `request_id` 到每条日志、接管 uvicorn/fastapi 日志输出。
 
 ```python
-from fastapi_augment.log import setup_logger, set_log_level
+from fastapi_augment.logger import setup_logger, set_log_level
 
 # 一键配置：控制台 + 按天轮转文件日志
 setup_logger(log_dir='./logs', rotation='day', backup_count=30)
@@ -654,26 +654,30 @@ app.include_router(create_health_router(
 
 ### 配置管理 — `config`
 
-基于 `pydantic-settings`，通过 `from_env()` 直接传参，无需手动导入 `SettingsConfigDict`：
+基于 `pydantic-settings`，支持多种配置来源（环境变量、.env、JSON、YAML、TOML），通过不同类方法加载：
 
 ```python
-from fastapi_augment.config import EnvSettings
+from fastapi_augment.config import AugmentBaseSettings
 
-class Settings(EnvSettings):
+class Settings(AugmentBaseSettings):
     database_url: str
     redis_url: str = ''
     debug: bool = False
     secret_key: str = 'change-me'
 
-# 直接传入 .env 路径、前缀等
-settings = Settings.from_env(
-    env_file='config/.env',
-    env_prefix='APP_',
-    env_nested_delimiter='__',
-)
+# 从环境变量加载
+cfg = Settings.from_env(env_prefix='APP_', env_nested_delimiter='__')
+
+# 从 .env 文件加载
+cfg = Settings.from_dotenv('.env', env_prefix='APP_')
+
+# 从 JSON / YAML / TOML 文件加载
+cfg = Settings.from_json('config.json')
+cfg = Settings.from_yaml('config.yaml')
+cfg = Settings.from_toml('config.toml')
 ```
 
-支持 `SettingsConfigDict` 的所有参数（`env_file`、`env_prefix`、`secrets_dir`、`yaml_file` 等），
+支持 `SettingsConfigDict` 的所有参数（`env_prefix`、`secrets_dir`、`yaml_file` 等），
 与模型字段值自动区分，无需关心分类。
 
 ### 中间件 — `middlewares`
@@ -699,7 +703,8 @@ fastapi_augment/
 │   └── utils/
 │       └── strings.py        # 字符串工具 / JSON 序列化
 ├── config/
-│   └── settings.py           # EnvSettings 配置管理
+│   ├── base_settings.py       # AugmentBaseSettings 配置管理
+│   └── database_settings.py   # DatabaseSettings 数据库配置
 ├── db/
 │   └── sqlalchemy/
 │       ├── engine.py         # EngineManager / NodeConfig / ClusterTopology
@@ -714,11 +719,11 @@ fastapi_augment/
 │   ├── checker.py            # BaseChecker / CheckResult / HealthResponse
 │   ├── checkers.py           # AppChecker / DatabaseChecker
 │   └── router.py             # create_health_router()
-├── log/
-│   ├── factory.py            # request_id 注入工厂
+├── logger/
+│   ├── record_factory.py     # request_id 注入工厂
 │   ├── filters.py            # UvicornNameRewriteFilter
 │   ├── handlers.py           # 多进程安全轮转处理器
-│   └── config.py             # setup_logger / set_log_level / set_log_format
+│   └── setup.py              # setup_logger / set_log_level / set_log_format
 ├── middlewares/
 │   ├── base.py               # BaseASGIMiddleware
 │   └── request_id.py         # RequestId 中间件

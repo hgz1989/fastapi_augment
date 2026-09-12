@@ -1,12 +1,11 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 多进程安全的日志轮转处理器，支持秒/分/时/天/周及自定义月/年轮转
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 多进程安全的日志轮转处理器，支持秒/分/时/天/周及自定义月/年轮转
 """
 import logging
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
-
 
 _logger = logging.getLogger(__name__)
 
@@ -14,9 +13,9 @@ _logger = logging.getLogger(__name__)
 class MultiProcessTimedRotatingFileHandler(TimedRotatingFileHandler):
     """支持多进程安全的按时间轮转处理器
 
-    多进程场景下，多个 worker 可能同时触发轮转。
+    多进程场景下，多个 worker 可能同时触发轮转
     通过捕获 ``OSError``（含 ``PermissionError``、``FileNotFoundError``）
-    来兼容其他进程已完成轮转或删除了旧文件的情况。
+    来兼容其他进程已完成轮转或删除了旧文件的情况
     """
 
     def doRollover(self) -> None:
@@ -31,7 +30,7 @@ class MultiProcessTimedRotatingFileHandler(TimedRotatingFileHandler):
             try:
                 self.stream = self._open()
             except OSError as exc:
-                _logger.warning('Failed to reopen log file after rollover: %s', exc)
+                _logger.warning('Failed to reopen logger file after rollover: %s', exc)
 
 
 class MonthlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):
@@ -47,23 +46,23 @@ class MonthlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):
         """
         super().__init__(filename, when='midnight', backupCount=backup_count, encoding=encoding)
 
-    def computeRollover(self, current_time: float) -> float:
+    def computeRollover(self, currentTime: int) -> int:
         """计算下次轮转时间（下月1日00:00:00）
 
         Args:
-            current_time: 当前UNIX时间戳
+            currentTime: 当前UNIX时间戳
 
         Returns:
             下次轮转的UNIX时间戳
         """
-        dt = datetime.fromtimestamp(current_time)
+        dt = datetime.fromtimestamp(currentTime)
 
         if dt.month == 12:
             next_month = datetime(dt.year + 1, 1, 1)
         else:
             next_month = datetime(dt.year, dt.month + 1, 1)
 
-        return next_month.timestamp()
+        return int(next_month.timestamp())
 
 
 class YearlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):
@@ -79,15 +78,15 @@ class YearlyRotatingFileHandler(MultiProcessTimedRotatingFileHandler):
         """
         super().__init__(filename, when='midnight', backupCount=backup_count, encoding=encoding)
 
-    def computeRollover(self, current_time: float) -> float:
+    def computeRollover(self, currentTime: int) -> int:
         """计算下次轮转时间（下一年1月1日00:00:00）
 
         Args:
-            current_time: 当前UNIX时间戳
+            currentTime: 当前UNIX时间戳
 
         Returns:
             下次轮转的UNIX时间戳
         """
-        dt = datetime.fromtimestamp(current_time)
+        dt = datetime.fromtimestamp(currentTime)
         next_year = datetime(dt.year + 1, 1, 1)
-        return next_year.timestamp()
+        return int(next_year.timestamp())

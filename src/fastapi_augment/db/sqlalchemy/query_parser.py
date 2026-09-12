@@ -83,14 +83,14 @@ def _get_column(model: type[ModelBase], field: str) -> Any:
 
 
 @lru_cache(maxsize=512)
-def _convert_value(type_id: int, python_type: type, value: str) -> Any:
+def _convert_value(_type_id: int, python_type: type, value: str) -> Any:
     """根据列的 Python 类型将字符串值转换为对应类型
 
     使用 lru_cache 缓存，避免无界增长，
     缓存键为 (type_id, python_type, value) 元组
 
     Args:
-        type_id: 列类型对象的 id，用于区分不同列
+        _type_id: 列类型对象的 id，用于区分不同列
         python_type: 列的 Python 类型
         value: 原始字符串值
 

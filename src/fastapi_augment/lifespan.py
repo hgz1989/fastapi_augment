@@ -60,7 +60,7 @@ class _HookItem:
 
 # ---------- 注册表 ----------
 class HookRegistry:
-    """生命周期钩子注册表。
+    """生命周期钩子注册表
 
     每个实例独立管理自己的钩子列表，支持：
         - 注册启动/关闭钩子
@@ -80,7 +80,7 @@ class HookRegistry:
 
     __slots__ = ('_startup_hooks', '_shutdown_hooks', '_startup_seen', '_shutdown_seen', '_logger')
 
-    def __init__(self, logger: Logger | None = None) -> None:
+    def __init__(self, logger: Logger | None = None):
         """初始化一个新的注册表实例，所有钩子列表为空"""
         self._startup_hooks: list[_HookItem] = []
         self._shutdown_hooks: list[_HookItem] = []
@@ -95,7 +95,7 @@ class HookRegistry:
             abort_on_exception: bool = STARTUP_ABORT_ON_EXCEPTION,
             timeout: int | float | None = None,
     ) -> None:
-        """注册启动钩子。
+        """注册启动钩子
 
         Args:
             func: 钩子函数
@@ -120,7 +120,7 @@ class HookRegistry:
             abort_on_exception: bool = SHUTDOWN_ABORT_ON_EXCEPTION,
             timeout: int | float | None = None,
     ) -> None:
-        """注册关闭钩子。
+        """注册关闭钩子
 
         Args:
             func: 钩子函数
@@ -158,7 +158,7 @@ class HookRegistry:
             abort_on_exception: bool = STARTUP_ABORT_ON_EXCEPTION,
             timeout: int | float | None = None,
     ) -> Callable[[HookFunc], HookFunc] | HookFunc:
-        """启动钩子装饰器。
+        """启动钩子装饰器
 
         可带参数调用：@registry.on_startup(priority=100)
         或不带参数：@registry.on_startup
@@ -199,7 +199,7 @@ class HookRegistry:
             abort_on_exception: bool = SHUTDOWN_ABORT_ON_EXCEPTION,
             timeout: int | float | None = None,
     ) -> Callable[[HookFunc], HookFunc] | HookFunc:
-        """关闭钩子装饰器。
+        """关闭钩子装饰器
 
         可带参数调用：@registry.on_shutdown(priority=100)
         或不带参数：@registry.on_shutdown
@@ -221,7 +221,7 @@ class HookRegistry:
         return decorator(func) if func else decorator
 
     async def run_startup(self, app: FastAPI) -> None:
-        """执行所有启动钩子。
+        """执行所有启动钩子
 
         Args:
             app: FastAPI 应用实例
@@ -232,7 +232,7 @@ class HookRegistry:
             self._logger.info('启动钩子执行完成')
 
     async def run_shutdown(self, app: FastAPI) -> None:
-        """执行所有关闭钩子。
+        """执行所有关闭钩子
 
         Args:
             app: FastAPI 应用实例
@@ -243,9 +243,9 @@ class HookRegistry:
             self._logger.info('关闭钩子执行完成')
 
     def clear(self) -> None:
-        """清空当前注册表中的所有钩子（包括启动和关闭）。
+        """清空当前注册表中的所有钩子（包括启动和关闭）
 
-        此方法会清空所有钩子列表和去重集合，用于测试环境隔离。
+        此方法会清空所有钩子列表和去重集合，用于测试环境隔离
         """
         self._startup_hooks.clear()
         self._shutdown_hooks.clear()
@@ -253,18 +253,18 @@ class HookRegistry:
         self._shutdown_seen.clear()
 
     def list_startup_hooks(self) -> list[str]:
-        """返回按执行顺序排列的启动钩子描述列表。
+        """返回按执行顺序排列的启动钩子描述列表
 
         Returns:
-            钩子描述字符串列表，顺序即为执行顺序。
+            钩子描述字符串列表，顺序即为执行顺序
         """
         return [self._format_hook(item) for item in self._startup_hooks]
 
     def list_shutdown_hooks(self) -> list[str]:
-        """返回按执行顺序排列的关闭钩子描述列表。
+        """返回按执行顺序排列的关闭钩子描述列表
 
         Returns:
-            钩子描述字符串列表，顺序即为执行顺序。
+            钩子描述字符串列表，顺序即为执行顺序
         """
         return [self._format_hook(item) for item in self._shutdown_hooks]
 
@@ -278,7 +278,7 @@ class HookRegistry:
             timeout: int | float | None,
             reverse_sort: bool,
     ) -> None:
-        """通用注册方法，供启动/关闭钩子复用。
+        """通用注册方法，供启动/关闭钩子复用
 
         Args:
             hooks: 目标钩子列表（启动或关闭）
@@ -311,7 +311,7 @@ class HookRegistry:
         hooks.sort(key=lambda x: x.priority, reverse=reverse_sort)
 
     async def _run_hooks(self, hooks: list[_HookItem], app: FastAPI) -> None:
-        """按序执行给定的钩子列表。
+        """按序执行给定的钩子列表
 
         Args:
             hooks: 钩子条目列表
@@ -330,6 +330,8 @@ class HookRegistry:
                 else:
                     await coro
             except asyncio.TimeoutError:
+                # TimeoutError 仅在 wait_for 分支触发，此处 timeout 必不为 None
+                assert timeout is not None
                 self._logger.error(
                     f'[生命周期钩子执行超时] {name}: 超过 {timeout}s',
                     exc_info=False
@@ -343,7 +345,7 @@ class HookRegistry:
 
     @staticmethod
     def _format_hook(item: _HookItem) -> str:
-        """将单个钩子条目格式化为可读的字符串。
+        """将单个钩子条目格式化为可读的字符串
 
         Args:
             item: 钩子条目
@@ -368,13 +370,13 @@ core_registry = HookRegistry()
 # ---------- FastAPI 生命周期 ----------
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """FastAPI 生命周期管理，强制 core_registry 在首位执行。
+    """FastAPI 生命周期管理，强制 core_registry 在首位执行
 
     从 app.state.registries 读取用户自定义注册表列表（可选），
-    并确保 core_registry 始终在列表最前面，以保证核心钩子优先执行。
+    并确保 core_registry 始终在列表最前面，以保证核心钩子优先执行
 
     启动时，按列表顺序执行每个注册表的 startup 钩子；
-    关闭时，按逆序执行 shutdown 钩子，保证资源释放顺序符合依赖关系。
+    关闭时，按逆序执行 shutdown 钩子，保证资源释放顺序符合依赖关系
 
     Example:
         app = FastAPI(lifespan=fastapi_lifespan)
@@ -439,7 +441,7 @@ async def fastapi_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # ---------- 测试辅助 ----------
 def clear_hooks(registry: HookRegistry | None = None) -> None:
-    """清空注册表钩子，默认清空 core_registry（用于测试隔离）。
+    """清空注册表钩子，默认清空 core_registry（用于测试隔离）
 
     Args:
         registry: 需要清空的注册表实例；不传默认 core_registry

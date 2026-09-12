@@ -15,10 +15,10 @@ from fastapi import FastAPI, APIRouter
 from starlette.middleware import Middleware
 
 from .common.exception_handlers import register_exception_handlers
+from .health import create_health_router
 from .lifespan import HookRegistry, fastapi_lifespan
 from .middlewares import RequestIdMiddleware
 from .openapi import configure_openapi_schema, OpenAPICustomConfig
-from .health import create_health_router
 
 if TYPE_CHECKING:
     from .db.sqlalchemy import EngineManager, SessionFactory
@@ -30,9 +30,17 @@ _RouteRegistrar = Callable[[FastAPI], None]
 
 def create_app(
         *,
-        title: str = 'FastAPI',
-        summary: str = '',
-        description: str = '',
+        title: str = 'FastAPI Augment',
+        summary: str = 'FastAPI Augment - Extended utilities and patterns for FastAPI',
+        description: str = (
+                'FastAPI Augment is a lightweight extension library for FastAPI that '
+                'provides out-of-the-box solutions for common backend challenges. It '
+                'includes asynchronous database session management (with read-write splitting), '
+                'unified API response models, pagination helpers, and streamlined dependency '
+                'injection for transactional operations. Designed to reduce boilerplate and '
+                'enforce clean architecture, it accelerates the development of production-ready '
+                'web services.'
+        ),
         version: str = '0.1.0',
         debug: bool = False,
         docs_url: str | None = '/docs',
@@ -62,7 +70,7 @@ def create_app(
         # 额外 FastAPI 参数
         **kwargs: Any,
 ) -> FastAPI:
-    """创建并配置 FastAPI 应用实例。
+    """创建并配置 FastAPI 应用实例
 
     工厂函数将以下组件统一装配到应用上：
         1. 生命周期管理 — 自动接入 :func:`fastapi_lifespan`，合并用户注册表与 core_registry
@@ -227,11 +235,11 @@ def create_app(
 def _resolve_registries(
         registries: Sequence[HookRegistry] | HookRegistry | None,
 ) -> list[HookRegistry]:
-    """将 registries 参数规范化为列表。
+    """将 registries 参数规范化为列表
 
     Args:
         registries: 用户传入的注册表参数，可以是单个 HookRegistry、
-            HookRegistry 序列或 None。
+            HookRegistry 序列或 None
 
     Returns:
         规范化后的 HookRegistry 列表

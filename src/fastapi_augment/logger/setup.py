@@ -1,13 +1,13 @@
 """
-@Author     : zarkhan
-@CreateDate : 2026/9/6
-@Description: 日志配置与管理——日志格式、级别、轮转、控制台/文件输出
+@Author         : zarkhan
+@CreateDate     : 2026/9/6
+@Description    : 日志初始化与管理——日志格式、级别、轮转、控制台/文件输出
 """
 import logging
 import sys
 from pathlib import Path
 
-from .factory import install_request_id_factory
+from .record_factory import install_request_id_factory
 from .filters import UvicornNameRewriteFilter
 from .handlers import (
     MonthlyRotatingFileHandler,
@@ -57,9 +57,15 @@ _init_done = False
 def _init_root_logger() -> None:
     """初始化根日志：安装request_id工厂、设置格式、接管uvicorn
 
-    仅在首次调用时执行，重复导入不会重复初始化。
-    根日志级别设为WARNING，第三方库的DEBUG/INFO默认不输出。
-    uvicorn/fastapi已单独设为INFO，不受根日志影响。
+    仅在首次调用时执行，重复导入不会重复初始化
+    根日志级别设为WARNING，第三方库的DEBUG/INFO默认不输出
+    uvicorn/fastapi已单独设为INFO，不受根日志影响
+
+    Note:
+        多进程环境下各进程拥有独立内存空间，_init_done 在每个
+        子进程中独立为 False，每个进程各自完成一次初始化——这是
+        符合预期的行为，日志 handler 属于进程级资源
+        多线程安全由 Python 导入锁与 GIL 保证，无需额外同步
     """
     global _init_done
     if _init_done:
@@ -114,7 +120,7 @@ def set_log_format(log_format: str) -> None:
 
 def setup_logger(
     log_dir: str | Path | None = None,
-    filename: str = 'app.log',
+    filename: str = 'app.logger',
     rotation: str = 'day',
     backup_count: int = 30,
     encoding: str = 'utf-8',
@@ -199,7 +205,9 @@ def setup_logger(
                     str(file_path), backup_count=backup_count, encoding=encoding
                 )
             else:
-                when, interval = _ROTATION_MAP[rotation_key]
+                rotation_entry = _ROTATION_MAP[rotation_key]
+                assert rotation_entry is not None  # month/year 已在上层处理
+                when, interval = rotation_entry
                 file_handler = MultiProcessTimedRotatingFileHandler(
                     filename=str(file_path), when=when, interval=interval,
                     backupCount=backup_count, encoding=encoding

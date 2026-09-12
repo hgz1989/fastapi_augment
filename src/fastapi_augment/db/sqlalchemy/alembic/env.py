@@ -31,7 +31,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 
 # 从环境变量 FASTAPI_AUGMENT_MODELS 动态导入用户模型模块，
-# 使模型注册到 Base.metadata，autogenerate 才能检测到变更。
+# 使模型注册到 Base.metadata，autogenerate 才能检测到变更
 _models_env = environ.get('FASTAPI_AUGMENT_MODELS', '')
 if _models_env:
     for _mod in _models_env.split(','):
